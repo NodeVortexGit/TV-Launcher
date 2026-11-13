@@ -33,6 +33,7 @@ class AuraService : AccessibilityService() {
     private lateinit var buds: BudsPopup
     private lateinit var sleepWarn: SleepWarning
     private lateinit var status: StatusPill
+    private lateinit var cover: SwitchCover
     private lateinit var am: AudioManager
     @Volatile var lastInput = SystemClock.elapsedRealtime()
         private set
@@ -52,6 +53,7 @@ class AuraService : AccessibilityService() {
         buds = BudsPopup(this)
         sleepWarn = SleepWarning(this)
         status = StatusPill(this)
+        cover = SwitchCover(this)
         Bt.init(this)
         NotificationHub.popup = { item -> if (Aura.prefs.getBoolean("popups", true) && !Lock.showing) toasts.show(item) }
         registerReceiver(receiver, IntentFilter().apply {
@@ -71,7 +73,7 @@ class AuraService : AccessibilityService() {
         instance = null
         try { unregisterReceiver(receiver) } catch (_: Throwable) { }
         Aura.main.removeCallbacks(idleTick)
-        volume.detach(); toasts.detach(); buds.detach(); sleepWarn.detach(); status.detach()
+        volume.detach(); toasts.detach(); buds.detach(); sleepWarn.detach(); status.detach(); cover.detach()
         NotificationHub.popup = null
         super.onDestroy()
     }
@@ -105,8 +107,8 @@ class AuraService : AccessibilityService() {
     // ----------------------------------------------------------------------------- Google TV profiles
 
     private class Switch(val target: String?, val learn: Boolean, var deadline: Long) {
-        var stage = 0; var ups = 0
-        var before: Set<String> = emptySet()
+        val started = SystemClock.elapsedRealtime()
+        var stage = 0; var ups = 0; var pin = false
     }
     @Volatile private var switching: Switch? = null
     private val stepR = Runnable { step() }
@@ -123,11 +125,12 @@ class AuraService : AccessibilityService() {
      * TV's home, clicks its avatar and picks the profile in its menu – the user chooses once, in Aura.
      */
     fun switchProfile(target: String?, learnOnly: Boolean) {
+        // Google's screens stay hidden behind VeloCinema's own for the whole switch.
+        cover.show(target, learnOnly)
         if (StockLauncher.disabled(this)) {
-            status.show("Подготвям смяната на профила…")
             StockLauncher.enable(this) { ok ->
                 if (ok) { redisableAfter = true; startSwitch(target, learnOnly) }
-                else { status.hide(); toasts.show(NotificationHub.Item("aura", packageName, "VeloCinema", "Профилът не може да се смени",
+                else { cover.hide(); toasts.show(NotificationHub.Item("aura", packageName, "VeloCinema", "Профилът не може да се смени",
                     "Включете разширените функции (Настройки на VeloCinema) или натиснете „Активиране“ в настройките на Google TV", null, 0, null, false)) }
             }
             return
@@ -140,7 +143,7 @@ class AuraService : AccessibilityService() {
     private fun startSwitch(target: String?, learnOnly: Boolean) {
         allowStockHome(25_000)
         switching = Switch(target, learnOnly, SystemClock.elapsedRealtime() + 9_000)
-        status.show(if (learnOnly) "Зареждам профилите от Google TV…" else "Превключване към ${target ?: "профила"}…")
+        cover.show(target, learnOnly)
         try {
             startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
                 .setComponent(android.content.ComponentName(LX, "$LX.home.HomeActivity"))
@@ -154,49 +157,72 @@ class AuraService : AccessibilityService() {
         if (SystemClock.elapsedRealtime() > s.deadline) { finishSwitch(false, leaveOpen = s.stage >= 1); return }
         val root = try { rootInActiveWindow } catch (_: Throwable) { null }
         if (root == null || root.packageName != LX) { Aura.main.postDelayed(stepR, 250); return }
+        // Google's "Изберете профил" screen: shown by itself when its launcher starts cold, or after
+        // the avatar was clicked. Every profile is one row, so pick straight from it.
+        if (s.stage < 2) {
+            val rows = chooserRows(root)
+            if (rows.isNotEmpty()) { onChooser(s, rows); return }
+        }
         when (s.stage) {
             0 -> {
                 val av = findAvatar(root)
                 if (av == null) {
-                    // Google TV's home may be scrolled down; walk up to its top bar.
-                    if (s.ups < 6) { performGlobalAction(GLOBAL_ACTION_DPAD_UP); s.ups++ }
-                    Aura.main.postDelayed(stepR, 350); return
+                    // Still loading, or Google TV's home is scrolled down: walk up to its top bar.
+                    if (s.ups < 6 && SystemClock.elapsedRealtime() - s.started > 2500) { performGlobalAction(GLOBAL_ACTION_DPAD_UP); s.ups++ }
+                    Aura.main.postDelayed(stepR, 300); return
                 }
                 val cur = profileName(av)
                 if (cur != null) Lock.current = cur
                 if (!s.learn && s.target != null && Lock.same(cur, s.target)) { finishSwitch(true); return }
-                s.before = labels(root).map { it.first }.toSet()
                 click(av); s.stage = 1
-                Aura.main.postDelayed(stepR, 1100)
+                Aura.main.postDelayed(stepR, 700)
             }
-            1 -> {
-                val fresh = labels(root).filter { it.first !in s.before && nameLike(it.first) }
-                if (fresh.isEmpty()) { Aura.main.postDelayed(stepR, 300); return }
-                val names = fresh.map { it.first.substringBefore(',').trim() }
-                Lock.profiles = (listOfNotNull(Lock.current) + names).distinct()
-                if (s.learn) { performGlobalAction(GLOBAL_ACTION_BACK); finishSwitch(true); return }
-                val hit = fresh.firstOrNull { Lock.same(it.first.substringBefore(',').trim(), s.target) }
-                if (hit == null) { finishSwitch(false, leaveOpen = true); return }
-                click(hit.second); s.stage = 2; s.deadline = SystemClock.elapsedRealtime() + 15_000
-                status.show("Превключване към ${s.target}…")
-                Aura.main.postDelayed(stepR, 1500)
-            }
+            1 -> Aura.main.postDelayed(stepR, 250) // waiting for the chooser rows
             2 -> {
                 val av = findAvatar(root)
                 if (av != null && Lock.same(profileName(av), s.target)) { Lock.current = s.target; finishSwitch(true) }
-                else Aura.main.postDelayed(stepR, 400)
+                // Google's own profile lock asks for its PIN: that one only the person can type.
+                else if (av == null && labels(root).any { GOOGLE_PIN.containsMatchIn(it.first) }) { s.pin = true; finishSwitch(false, leaveOpen = true) }
+                else Aura.main.postDelayed(stepR, 300)
             }
         }
     }
 
+    private class Row(val name: String, val current: Boolean, val node: AccessibilityNodeInfo)
+
+    /** Rows of Google's profile chooser: "<name>, <e-mail>, …" (the active one mentions "текущия профил"). */
+    private fun chooserRows(root: AccessibilityNodeInfo): List<Row> = labels(root).mapNotNull { (t, n) ->
+        val m = CHOOSER_ROW.find(t) ?: return@mapNotNull null
+        Row(m.groupValues[1].trim(), CURRENT_ROW.containsMatchIn(t), n)
+    }
+
+    private fun onChooser(s: Switch, rows: List<Row>) {
+        Lock.profiles = rows.map { it.name }.distinct()
+        rows.firstOrNull { it.current }?.let { Lock.current = it.name }
+        if (s.learn) { finishSwitch(true); return }
+        val hit = rows.firstOrNull { Lock.same(it.name, s.target) } ?: run { finishSwitch(false, leaveOpen = true); return }
+        if (hit.current) { finishSwitch(true); return }
+        click(hit.node); s.stage = 2; s.deadline = SystemClock.elapsedRealtime() + 15_000
+        cover.status("Почти готово…")
+        Aura.main.postDelayed(stepR, 900)
+    }
+
     private fun finishSwitch(ok: Boolean, leaveOpen: Boolean = false) {
         val s = switching
+        android.util.Log.i("VeloSwitch", "finish ok=$ok leaveOpen=$leaveOpen stage=${s?.stage} t=${s?.let { SystemClock.elapsedRealtime() - it.started }}ms")
         switching = null
         Aura.main.removeCallbacks(stepR)
-        status.hide()
         if (redisableAfter) { redisableAfter = false; StockLauncher.disable(this) }
-        if (ok || !leaveOpen) { allowStockUntil = 0L; goHome() }
-        else { allowStockHome(60_000); toasts.show(NotificationHub.Item("aura", packageName, "VeloCinema", "Изберете профила", "Изберете ${s?.target ?: "профил"} от менюто на Google TV", null, 0, null, false)) }
+        if (ok || !leaveOpen) {
+            allowStockUntil = 0L; goHome()
+            // Lift the cover only once VeloCinema's home is back underneath it.
+            Aura.main.postDelayed({ cover.hide() }, 450)
+        }
+        else {
+            cover.hide(); allowStockHome(60_000)
+            val msg = if (s?.pin == true) "Въведете ПИН кода на Google за ${s.target}" else "Изберете ${s?.target ?: "профил"} от менюто на Google TV"
+            toasts.show(NotificationHub.Item("aura", packageName, "VeloCinema", "Довършете смяната на профила", msg, null, 0, null, false))
+        }
     }
 
     /** Clicks a button with one of [texts] in the active window (used for "Активиране" in TV Settings). */
@@ -240,11 +266,6 @@ class AuraService : AccessibilityService() {
         return out
     }
 
-    private fun nameLike(t: String): Boolean {
-        val s = t.substringBefore(',').trim()
-        return s.length in 2..32 && !s.any { it.isDigit() } && !NOT_NAMES.containsMatchIn(s) && !AVATAR.containsMatchIn(t)
-    }
-
     private fun click(n: AccessibilityNodeInfo) {
         var c: AccessibilityNodeInfo? = n
         while (c != null && !c.isClickable) c = c.parent
@@ -261,6 +282,12 @@ class AuraService : AccessibilityService() {
         val code = e.keyCode
 
         if (countdown >= 0) { if (down) cancelCountdown(); return true }
+
+        // Profile switch in progress: the remote must not steer Google's hidden menu. Back cancels.
+        if (cover.attached) {
+            if (code == KeyEvent.KEYCODE_BACK && !down) { if (switching != null) finishSwitch(false) else cover.hide() }
+            return true
+        }
 
         if (Lock.showing && code !in LOCK_KEYS) {
             if (code == KeyEvent.KEYCODE_HOME && !down) Lock.show(this)
@@ -411,8 +438,10 @@ class AuraService : AccessibilityService() {
         @Volatile var instance: AuraService? = null
         const val BATTERY_CHANGED = "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED"
         const val LX = "com.google.android.apps.tv.launcherx"
+        private val CHOOSER_ROW = Regex("^([^,@]{2,40}),\\s*[^,\\s]+@[^,\\s]+")
+        private val GOOGLE_PIN = Regex("(?i)(ПИН|\\bPIN\\b)")
+        private val CURRENT_ROW = Regex("(?i)(текущия профил|current profile)")
         private val AVATAR = Regex("(Влезли сте като|Влязохте като|Signed in as)\\s+(.+?)[.,]\\s")
-        private val NOT_NAMES = Regex("(?i)(добав|add|настрой|setting|управ|manage|акаунт|account|изход|sign|дет|kid|child|гост|guest|профил|profile|google|помощ|help|търс|search|начало|home|приложения|apps|скрийнсейвър|screensaver|бързи|quick|за вас|for you|продълж|continue|youtube|spotify|библиот|library|на живо|live)")
         const val EXTRA_BATTERY = "android.bluetooth.device.extra.BATTERY_LEVEL"
         private val LOCK_KEYS = setOf(
             KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,

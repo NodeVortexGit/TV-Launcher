@@ -30,8 +30,18 @@ object StockLauncher {
 
     fun enable(svc: AuraService, cb: (Boolean) -> Unit) {
         val b = Aura.app.bridge
-        if (b.ready) { b.shell("pm enable $LX") { Aura.main.postDelayed({ cb(!disabled(svc)) }, 600) }; return }
-        // No bridge: open Google TV's app page in Settings and press "Активиране" ourselves.
+        // Always try the system connection first (it reconnects by itself); Settings is the fallback.
+        if (b.ready || Aura.prefs.getBoolean("bridgeTrusted", false)) {
+            b.shell("pm enable $LX") { out ->
+                if (out != null) Aura.main.postDelayed({ cb(!disabled(svc)) }, 300) else enableViaSettings(svc, cb)
+            }
+            return
+        }
+        enableViaSettings(svc, cb)
+    }
+
+    /** No system connection: open Google TV's app page in Settings and press "Активиране" ourselves. */
+    private fun enableViaSettings(svc: AuraService, cb: (Boolean) -> Unit) {
         try {
             svc.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$LX")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: Throwable) { cb(false); return }

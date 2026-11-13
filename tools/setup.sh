@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# VeloCinema launcher – one-time device setup (safe to re-run; re-run after every Chromecast reboot
-# to bring back the "power features" bridge).
+# VeloCinema launcher – one-time device setup (safe to re-run). Works over USB or wireless debugging.
+# After the first approval VeloCinema reconnects to the system by itself after reboots.
 set -euo pipefail
 PKG=com.nodevortex.aura
 A11Y="$PKG/$PKG.system.AuraService"
@@ -32,8 +32,7 @@ adb shell dpm set-active-admin $PKG/.system.SleepAdmin 2>/dev/null || true
 echo "• Make VeloCinema the real default home screen (survives reboots)"
 bash "$(dirname "$0")/make-default.sh"
 
-echo "• Power-features bridge (adb over 127.0.0.1:5555 – resets when the Chromecast reboots)"
-adb tcpip 5555 >/dev/null && sleep 3
-adb wait-for-usb-device 2>/dev/null || true
+echo "• Power-features bridge: open port 5555 once so the TV can show the approval prompt"
+adb tcpip 5555 >/dev/null || true
 echo "Done. On the TV: Настройки на VeloCinema → Разширени функции → OK, allow \"velocinema@launcher\" (tick Always allow)."
 echo "After the next reboot the TV may ask once: Allow wireless debugging on this network? → tick Always allow."

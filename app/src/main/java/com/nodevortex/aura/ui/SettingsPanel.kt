@@ -139,7 +139,7 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
         renderBridge()
         addView(ctx.label(13f, 420, C.textFaint, 6,
             "Позволява на VeloCinema да сменя каналите в COTV, да чисти кеша на приложения, да ги спира и да използва телефона като дистанционно. " +
-                "След всеки рестарт на Chromecast трябва да се пусне tools/setup.sh от компютъра. Първия път разрешете „velocinema@launcher“ на телевизора."),
+                "След рестарт VeloCinema се свързва отново сама (през безжично отстраняване на грешки). Първия път разрешете „velocinema@launcher“ на телевизора."),
             lp(MATCH, WRAP).margins(l = 18.dp, r = 18.dp, t = 4.dp))
 
         section("Изпращане към телевизора")

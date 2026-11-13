@@ -439,3 +439,47 @@ class StatusPill(ctx: Context) : Overlay(ctx) {
     fun show(t: String) { text.text = t; attach(); card.alpha = 0f; card.animate().alpha(1f).setDuration(180).start() }
     fun hide() { if (attached) card.animate().alpha(0f).setDuration(150).withEndAction { detach() }.start() }
 }
+
+// ===================================================================================== profile switch cover
+
+/**
+ * Full-screen VeloCinema screen shown while a Google TV profile switch runs. Google's own profile
+ * menu has to be operated underneath (only it may switch profiles), so this keeps it out of sight.
+ * Not focusable: the accessibility helper still sees and clicks Google's window below it.
+ */
+class SwitchCover(ctx: Context) : Overlay(ctx) {
+    override val fullWidth = true
+    override val fullHeight = true
+    private val avatar = ImageView(ctx).apply { scaleType = ImageView.ScaleType.CENTER_CROP; clipToOutline = true
+        outlineProvider = object : android.view.ViewOutlineProvider() {
+            override fun getOutline(v: View, o: android.graphics.Outline) { o.setOval(0, 0, v.width, v.height) }
+        } }
+    private val title: TextView = ctx.label(34f, 560, C.text).apply { gravity = Gravity.CENTER }
+    private val sub: TextView = ctx.label(18f, 420, C.textDim).apply { gravity = Gravity.CENTER }
+    private val col = LinearLayout(ctx).apply {
+        orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
+        addView(avatar, lp(150.dp, 150.dp).margins(b = 32.dp))
+        addView(title, lp(WRAP, WRAP))
+        addView(sub, lp(WRAP, WRAP).margins(t = 10.dp))
+        addView(android.widget.ProgressBar(ctx).apply { isIndeterminate = true; indeterminateTintList = android.content.res.ColorStateList.valueOf(C.text) },
+            lp(36.dp, 36.dp).margins(t = 36.dp))
+    }
+    override val root = FrameLayout(ctx).apply {
+        setBackgroundColor(C.bg)
+        addView(col, flp(WRAP, WRAP, Gravity.CENTER))
+        addView(ImageView(ctx).apply { setImageResource(R.drawable.logo); adjustViewBounds = true; alpha = 0.85f },
+            flp(WRAP, 54.dp, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).margins(b = 36.dp))
+    }
+
+    fun show(name: String?, learn: Boolean) {
+        avatar.setImageBitmap(com.nodevortex.aura.lock.Lock.avatar(ctx, name, 300))
+        avatar.visibility = if (learn) View.GONE else View.VISIBLE
+        title.text = if (learn) "Зареждам профилите…" else "Здравей, ${com.nodevortex.aura.lock.Lock.displayName(name).substringBefore(' ')}"
+        sub.text = if (learn) "Само момент" else "Превключвам профила…"
+        val fresh = !attached
+        attach()
+        if (fresh) { root.alpha = 0f; root.animate().alpha(1f).setDuration(160).start() }
+    }
+    fun status(t: String) { sub.text = t }
+    fun hide() { if (attached) root.animate().alpha(0f).setDuration(220).withEndAction { detach() }.start() }
+}

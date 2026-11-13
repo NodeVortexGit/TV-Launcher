@@ -1,6 +1,7 @@
 package com.nodevortex.aura.bridge
 
 import android.content.Context
+import android.util.Log
 import android.util.Base64
 import com.nodevortex.aura.Aura
 import java.io.DataInputStream
@@ -22,11 +23,12 @@ import java.util.concurrent.Executors
 import javax.crypto.Cipher
 
 /**
- * Minimal ADB client talking to the Chromecast's own adbd over 127.0.0.1:5555.
+ * Minimal ADB client talking to the Chromecast's own adbd on loopback.
  *
- * Gives the launcher shell-level powers that no normal app has: typing channel numbers into
- * COTV, clearing other apps' caches, force-stopping, whitelisting from background limits.
- * Needs `adb tcpip 5555` once per boot and a one-time "Allow debugging" approval on the TV.
+ * Gives the launcher shell-level powers that no normal app has: keeping Google's launcher off,
+ * typing channel numbers into COTV, clearing other apps' caches, force-stopping.
+ * Needs a one-time "Allow debugging" approval on the TV (over port 5555, from tools/setup.sh);
+ * after a reboot it reconnects by itself through Wireless debugging (TLS) with the same key.
  */
 class AdbBridge(private val ctx: Context) {
 
@@ -49,11 +51,14 @@ class AdbBridge(private val ctx: Context) {
     }
 
     /** Quietly check whether the bridge works (only succeeds if our key is already trusted). */
-    fun probe() = exec.execute {
+    fun probe(attempt: Int = 0) { exec.execute {
         if (!Aura.prefs.getBoolean("bridgeTrusted", false)) { set(State.OFFLINE); return@execute }
         val out = runShell("echo ok", 4000, allowPrompt = false)
-        set(if (out?.trim() == "ok") State.READY else State.OFFLINE)
-    }
+        val ok = out?.trim() == "ok"
+        set(if (ok) State.READY else State.OFFLINE)
+        // Right after boot adbd / wireless debugging may still be starting: try again a few times.
+        if (!ok && attempt < 4) Aura.main.postDelayed({ if (state != State.READY) probe(attempt + 1) }, 20_000L shl attempt)
+    } }
 
     /** Interactive connect: may show "Allow USB debugging?" on the TV for our key. */
     fun connect(cb: ((Boolean) -> Unit)? = null) = exec.execute {
@@ -79,44 +84,68 @@ class AdbBridge(private val ctx: Context) {
      * (it holds WRITE_SECURE_SETTINGS). Both accept the key you approved once on the TV.
      */
     private fun runShell(cmd: String, timeoutMs: Long, allowPrompt: Boolean): String? {
-        val link = linkTcp(timeoutMs, allowPrompt) ?: linkTls(timeoutMs) ?: return null
-        try {
-            val local = 1
-            send(link.os, OPEN, local, 0, "shell:$cmd\u0000".toByteArray())
-            val sb = StringBuilder()
-            var remote = 0
-            while (true) {
-                val m = read(link.ins)
-                when (m.cmd) {
-                    OKAY -> remote = m.arg0
-                    WRTE -> { sb.append(String(m.data, Charsets.UTF_8)); send(link.os, OKAY, local, m.arg0, ByteArray(0)) }
-                    CLSE -> { send(link.os, CLSE, local, remote, ByteArray(0)); return sb.toString() }
+        // One persistent connection, like the real adb: adbd copes badly with rapid reconnects
+        // (it resets or silently drops a connection that arrives while the last one is closing).
+        for (attempt in 0..1) {
+            val link = conn ?: (linkTcp(timeoutMs, allowPrompt) ?: linkTls(timeoutMs))?.also { conn = it }
+                ?: run { Log.w(TAG, "no adbd link (5555 closed, TLS port ${Aura.prefs.getInt("adbTlsPort", 0)})"); return null }
+            val local = nextLocal++.also { if (nextLocal > 1_000_000) nextLocal = 1 }
+            try {
+                link.sock.soTimeout = timeoutMs.toInt().coerceAtLeast(2000)
+                send(link.os, OPEN, local, 0, "shell:$cmd\u0000".toByteArray())
+                val sb = StringBuilder()
+                var remote = 0
+                while (true) {
+                    val m = read(link.ins)
+                    if (m.arg1 != local) continue // late packets of an earlier stream
+                    when (m.cmd) {
+                        OKAY -> remote = m.arg0
+                        WRTE -> { sb.append(String(m.data, Charsets.UTF_8)); send(link.os, OKAY, local, m.arg0, ByteArray(0)) }
+                        CLSE -> { send(link.os, CLSE, local, remote, ByteArray(0)); return sb.toString() }
+                    }
                 }
+            } catch (t: Throwable) {
+                Log.w(TAG, "shell '$cmd' failed (attempt $attempt): $t")
+                drop()
+                if (attempt == 0) Thread.sleep(600)
             }
-        } catch (t: Throwable) {
-            return null
-        } finally {
-            try { link.sock.close() } catch (_: Throwable) { }
         }
+        return null
     }
+
+    @Volatile private var conn: Link? = null
+    private var nextLocal = 1
+    private fun drop() { try { conn?.sock?.close() } catch (_: Throwable) { }; conn = null }
 
     private class Link(val sock: Socket, val ins: DataInputStream, val os: OutputStream)
 
+    /** [timeoutMs] bounds the handshake only (long when the TV may be showing the approval prompt). */
     private fun open(port: Int, timeoutMs: Long): Socket? = try {
         Socket().apply {
             connect(InetSocketAddress("127.0.0.1", port), 1500)
-            soTimeout = timeoutMs.toInt().coerceAtLeast(2000); tcpNoDelay = true
+            soTimeout = timeoutMs.toInt().coerceIn(2000, 60_000); tcpNoDelay = true; keepAlive = true
         }
     } catch (_: Throwable) { null }
 
     private fun linkTcp(timeoutMs: Long, allowPrompt: Boolean): Link? {
-        val s = open(5555, timeoutMs) ?: return null
+        val s = open(5555, if (allowPrompt) timeoutMs else 5000) ?: return null
         return handshake(s, allowPrompt).also { if (it == null) try { s.close() } catch (_: Throwable) { } }
     }
 
+    /**
+     * Straight to the remembered port (no probe first: adbd resets a connection that arrives while it
+     * is still tearing down the previous one from the same address). Rediscover only if that fails.
+     */
     private fun linkTls(timeoutMs: Long): Link? {
-        val port = tlsPort() ?: return null
-        val s = open(port, timeoutMs) ?: run { Aura.prefs.edit().remove("adbTlsPort").apply(); return null }
+        val cached = Aura.prefs.getInt("adbTlsPort", 0)
+        if (cached > 0) tlsLink(cached, timeoutMs)?.let { return it }
+        val port = findTlsPort() ?: return null
+        Thread.sleep(400)
+        return tlsLink(port, timeoutMs) ?: run { Thread.sleep(900); tlsLink(port, timeoutMs) }
+    }
+
+    private fun tlsLink(port: Int, timeoutMs: Long): Link? {
+        val s = open(port, 5000) ?: return null
         return handshake(s, false).also { if (it == null) try { s.close() } catch (_: Throwable) { } }
     }
 
@@ -152,7 +181,7 @@ class AdbBridge(private val ctx: Context) {
                     else -> return null
                 }
             }
-        } catch (t: Throwable) { return null }
+        } catch (t: Throwable) { Log.w(TAG, "handshake on ${sock.port} failed: $t"); return null }
     }
 
     // ------------------------------------------------------------------------------ TLS (wireless debugging)
@@ -203,10 +232,8 @@ class AdbBridge(private val ctx: Context) {
         return java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(der.inputStream()) as java.security.cert.X509Certificate
     }
 
-    /** Port of adbd's TLS (wireless debugging) server: cached, else switch wireless debugging on and find it. */
-    private fun tlsPort(): Int? {
-        val cached = Aura.prefs.getInt("adbTlsPort", 0)
-        if (cached > 0 && isStls(cached)) return cached
+    /** Port of adbd's TLS (wireless debugging) server: switch wireless debugging on if needed and find it. */
+    private fun findTlsPort(): Int? {
         if (!Aura.prefs.getBoolean("bridgeTrusted", false)) return null
         try {
             val cr = ctx.contentResolver
@@ -215,11 +242,32 @@ class AdbBridge(private val ctx: Context) {
                 Thread.sleep(2500)
             }
         } catch (_: Throwable) { }
-        repeat(3) {
-            scanForStls()?.let { Aura.prefs.edit().putInt("adbTlsPort", it).apply(); return it }
-            Thread.sleep(1500)
+        // Fast path: adbd runs as the shell uid and is (nearly) its only listener — read it from the
+        // kernel's socket table (readable for targetSdk ≤ 28 apps). Retry while adbd is still starting.
+        repeat(10) {
+            val cands = adbdListeners()
+            // A single adbd listener needs no probe; several (rare) get asked for STLS.
+            (if (cands.size == 1) cands.first() else cands.firstOrNull { isStls(it) })
+                ?.let { Aura.prefs.edit().putInt("adbTlsPort", it).apply(); return it }
+            Thread.sleep(1000)
         }
+        scanForStls()?.let { Aura.prefs.edit().putInt("adbTlsPort", it).apply(); return it }
         return null
+    }
+
+    /** Listening TCP ports owned by uid 2000 (shell = adbd), from /proc/net/tcp{6,}. */
+    private fun adbdListeners(): List<Int> {
+        val out = ArrayList<Int>(2)
+        for (f in arrayOf("/proc/net/tcp6", "/proc/net/tcp")) try {
+            java.io.File(f).forEachLine { line ->
+                val c = line.trim().split(' ').filter { it.isNotEmpty() }
+                if (c.size > 7 && c[3] == "0A" && c[7] == "2000") {
+                    val port = c[1].substringAfterLast(':').toIntOrNull(16) ?: return@forEachLine
+                    if (port != 5555 && port !in out) out += port
+                }
+            }
+        } catch (_: Throwable) { }
+        return out
     }
 
     /** adbd picks a random ephemeral port; scan loopback quickly and ask each open port for STLS. */
@@ -302,6 +350,7 @@ class AdbBridge(private val ctx: Context) {
     }
 
     companion object {
+        private const val TAG = "VeloBridge"
         private const val CNXN = 0x4e584e43
         private const val AUTH = 0x48545541
         private const val OPEN = 0x4e45504f
