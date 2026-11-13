@@ -83,7 +83,9 @@ class AuraService : AccessibilityService() {
         if (p == LX && cls.endsWith(".home.HomeActivity")) {
             // Google TV forces its own home; make Aura the real home screen.
             if (switching == null && SystemClock.elapsedRealtime() > allowStockUntil && Aura.prefs.getBoolean("homeOverride", true) && !Lock.showing) {
-                goHome(); return
+                goHome()
+                Aura.main.postDelayed({ StockLauncher.enforce(this) }, 1500)
+                return
             }
             if (switching == null) Aura.main.postDelayed({ readCurrentProfile() }, 900)
         } else if (p != LX && p != packageName && p != "com.android.systemui" && cls.contains("Activity")) {

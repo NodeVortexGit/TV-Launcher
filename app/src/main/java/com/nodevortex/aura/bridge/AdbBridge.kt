@@ -73,13 +73,56 @@ class AdbBridge(private val ctx: Context) {
 
     // ------------------------------------------------------------------------------ protocol
 
+    /**
+     * A shell on this TV. Tries adbd's plain TCP port (after `adb tcpip 5555`) first, then the
+     * encrypted Wireless-debugging port, which VeloCinema can switch on by itself after a reboot
+     * (it holds WRITE_SECURE_SETTINGS). Both accept the key you approved once on the TV.
+     */
     private fun runShell(cmd: String, timeoutMs: Long, allowPrompt: Boolean): String? {
-        var sock: Socket? = null
+        val link = linkTcp(timeoutMs, allowPrompt) ?: linkTls(timeoutMs) ?: return null
         try {
-            sock = Socket()
-            sock.connect(InetSocketAddress("127.0.0.1", 5555), 1500)
-            sock.soTimeout = timeoutMs.toInt().coerceAtLeast(2000)
-            sock.tcpNoDelay = true
+            val local = 1
+            send(link.os, OPEN, local, 0, "shell:$cmd\u0000".toByteArray())
+            val sb = StringBuilder()
+            var remote = 0
+            while (true) {
+                val m = read(link.ins)
+                when (m.cmd) {
+                    OKAY -> remote = m.arg0
+                    WRTE -> { sb.append(String(m.data, Charsets.UTF_8)); send(link.os, OKAY, local, m.arg0, ByteArray(0)) }
+                    CLSE -> { send(link.os, CLSE, local, remote, ByteArray(0)); return sb.toString() }
+                }
+            }
+        } catch (t: Throwable) {
+            return null
+        } finally {
+            try { link.sock.close() } catch (_: Throwable) { }
+        }
+    }
+
+    private class Link(val sock: Socket, val ins: DataInputStream, val os: OutputStream)
+
+    private fun open(port: Int, timeoutMs: Long): Socket? = try {
+        Socket().apply {
+            connect(InetSocketAddress("127.0.0.1", port), 1500)
+            soTimeout = timeoutMs.toInt().coerceAtLeast(2000); tcpNoDelay = true
+        }
+    } catch (_: Throwable) { null }
+
+    private fun linkTcp(timeoutMs: Long, allowPrompt: Boolean): Link? {
+        val s = open(5555, timeoutMs) ?: return null
+        return handshake(s, allowPrompt).also { if (it == null) try { s.close() } catch (_: Throwable) { } }
+    }
+
+    private fun linkTls(timeoutMs: Long): Link? {
+        val port = tlsPort() ?: return null
+        val s = open(port, timeoutMs) ?: run { Aura.prefs.edit().remove("adbTlsPort").apply(); return null }
+        return handshake(s, false).also { if (it == null) try { s.close() } catch (_: Throwable) { } }
+    }
+
+    /** CNXN, then either classic RSA AUTH or STLS (TLS 1.3 with our key as the client certificate). */
+    private fun handshake(sock: Socket, allowPrompt: Boolean): Link? {
+        try {
             val ins = DataInputStream(sock.getInputStream().buffered())
             val os = sock.getOutputStream()
             send(os, CNXN, VERSION, MAX_DATA, "host::\u0000".toByteArray())
@@ -96,28 +139,113 @@ class AdbBridge(private val ctx: Context) {
                             send(os, AUTH, 3, 0, publicKeyBlob())
                         }
                     }
-                    CNXN -> break
+                    STLS -> {
+                        send(os, STLS, STLS_VERSION, 0, ByteArray(0))
+                        val ssl = tlsContext().socketFactory.createSocket(sock, "127.0.0.1", sock.port, true) as javax.net.ssl.SSLSocket
+                        ssl.useClientMode = true
+                        ssl.startHandshake()
+                        val sins = DataInputStream(ssl.inputStream.buffered())
+                        val reply = read(sins)
+                        return if (reply.cmd == CNXN) Link(ssl, sins, ssl.outputStream) else null
+                    }
+                    CNXN -> return Link(sock, ins, os)
                     else -> return null
                 }
             }
-            val local = 1
-            send(os, OPEN, local, 0, "shell:$cmd\u0000".toByteArray())
-            val sb = StringBuilder()
-            var remote = 0
-            while (true) {
-                val m = read(ins)
-                when (m.cmd) {
-                    OKAY -> remote = m.arg0
-                    WRTE -> { sb.append(String(m.data, Charsets.UTF_8)); send(os, OKAY, local, m.arg0, ByteArray(0)) }
-                    CLSE -> { send(os, CLSE, local, remote, ByteArray(0)); return sb.toString() }
-                }
-            }
-        } catch (t: Throwable) {
-            return null
-        } finally {
-            try { sock?.close() } catch (_: Throwable) { }
-        }
+        } catch (t: Throwable) { return null }
     }
+
+    // ------------------------------------------------------------------------------ TLS (wireless debugging)
+
+    private fun tlsContext(): javax.net.ssl.SSLContext {
+        val cert = clientCert
+        val km = object : javax.net.ssl.X509ExtendedKeyManager() {
+            override fun getClientAliases(keyType: String?, issuers: Array<out java.security.Principal>?) = arrayOf("k")
+            override fun chooseClientAlias(keyType: Array<out String>?, issuers: Array<out java.security.Principal>?, socket: Socket?) = "k"
+            override fun chooseEngineClientAlias(keyType: Array<out String>?, issuers: Array<out java.security.Principal>?, engine: javax.net.ssl.SSLEngine?) = "k"
+            override fun getServerAliases(keyType: String?, issuers: Array<out java.security.Principal>?): Array<String>? = null
+            override fun chooseServerAlias(keyType: String?, issuers: Array<out java.security.Principal>?, socket: Socket?): String? = null
+            override fun getCertificateChain(alias: String?) = arrayOf(cert)
+            override fun getPrivateKey(alias: String?) = keys.private
+        }
+        // adbd presents a self-signed certificate; we are talking to our own device over loopback.
+        val tm = object : javax.net.ssl.X509TrustManager {
+            override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+            override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
+        }
+        return javax.net.ssl.SSLContext.getInstance("TLSv1.3").apply { init(arrayOf(km), arrayOf(tm), null) }
+    }
+
+    /** Minimal self-signed X.509 certificate for our ADB key (DER built by hand; no BouncyCastle). */
+    private val clientCert: java.security.cert.X509Certificate by lazy { buildCert() }
+
+    private fun buildCert(): java.security.cert.X509Certificate {
+        fun len(n: Int): ByteArray = when {
+            n < 0x80 -> byteArrayOf(n.toByte())
+            n < 0x100 -> byteArrayOf(0x81.toByte(), n.toByte())
+            n < 0x10000 -> byteArrayOf(0x82.toByte(), (n shr 8).toByte(), n.toByte())
+            else -> byteArrayOf(0x83.toByte(), (n shr 16).toByte(), (n shr 8).toByte(), n.toByte())
+        }
+        fun tlv(tag: Int, body: ByteArray) = byteArrayOf(tag.toByte()) + len(body.size) + body
+        fun seq(vararg parts: ByteArray) = tlv(0x30, parts.fold(ByteArray(0)) { a, b -> a + b })
+        val sha256Rsa = seq(byteArrayOf(0x06, 0x09, 0x2A, 0x86.toByte(), 0x48, 0x86.toByte(), 0xF7.toByte(), 0x0D, 0x01, 0x01, 0x0B), byteArrayOf(0x05, 0x00))
+        val name = seq(tlv(0x31, seq(byteArrayOf(0x06, 0x03, 0x55, 0x04, 0x03), tlv(0x0C, "velocinema".toByteArray()))))
+        val validity = seq(tlv(0x17, "250101000000Z".toByteArray()), tlv(0x17, "491231235959Z".toByteArray()))
+        val tbs = seq(
+            tlv(0xA0, tlv(0x02, byteArrayOf(2))),               // v3
+            tlv(0x02, BigInteger.valueOf(System.currentTimeMillis()).toByteArray()),
+            sha256Rsa, name, validity, name,
+            keys.public.encoded,                                 // SubjectPublicKeyInfo
+        )
+        val sig = java.security.Signature.getInstance("SHA256withRSA").run { initSign(keys.private); update(tbs); sign() }
+        val der = seq(tbs, sha256Rsa, tlv(0x03, byteArrayOf(0) + sig))
+        return java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(der.inputStream()) as java.security.cert.X509Certificate
+    }
+
+    /** Port of adbd's TLS (wireless debugging) server: cached, else switch wireless debugging on and find it. */
+    private fun tlsPort(): Int? {
+        val cached = Aura.prefs.getInt("adbTlsPort", 0)
+        if (cached > 0 && isStls(cached)) return cached
+        if (!Aura.prefs.getBoolean("bridgeTrusted", false)) return null
+        try {
+            val cr = ctx.contentResolver
+            if (android.provider.Settings.Global.getInt(cr, "adb_wifi_enabled", 0) != 1) {
+                android.provider.Settings.Global.putInt(cr, "adb_wifi_enabled", 1)
+                Thread.sleep(2500)
+            }
+        } catch (_: Throwable) { }
+        repeat(3) {
+            scanForStls()?.let { Aura.prefs.edit().putInt("adbTlsPort", it).apply(); return it }
+            Thread.sleep(1500)
+        }
+        return null
+    }
+
+    /** adbd picks a random ephemeral port; scan loopback quickly and ask each open port for STLS. */
+    private fun scanForStls(): Int? {
+        val open = java.util.concurrent.ConcurrentLinkedQueue<Int>()
+        val pool = Executors.newFixedThreadPool(8)
+        val range = 32768..60999
+        val chunk = (range.last - range.first + 1) / 8 + 1
+        for (t in 0 until 8) pool.execute {
+            val from = range.first + t * chunk; val to = minOf(range.last, from + chunk - 1)
+            for (p in from..to) {
+                if (p == com.nodevortex.aura.system.ShareServer.PORT) continue
+                try { Socket().use { it.connect(InetSocketAddress("127.0.0.1", p), 40) }; open.add(p) } catch (_: Throwable) { }
+            }
+        }
+        pool.shutdown(); pool.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS)
+        return open.sorted().firstOrNull { isStls(it) }
+    }
+
+    private fun isStls(port: Int): Boolean = try {
+        Socket().use { s ->
+            s.connect(InetSocketAddress("127.0.0.1", port), 400); s.soTimeout = 1500
+            send(s.getOutputStream(), CNXN, VERSION, MAX_DATA, "host::\u0000".toByteArray())
+            read(DataInputStream(s.getInputStream())).cmd == STLS
+        }
+    } catch (_: Throwable) { false }
 
     private class Msg(val cmd: Int, val arg0: Int, val arg1: Int, val data: ByteArray)
 
@@ -180,6 +308,8 @@ class AdbBridge(private val ctx: Context) {
         private const val OKAY = 0x59414b4f
         private const val CLSE = 0x45534c43
         private const val WRTE = 0x45545257
+        private const val STLS = 0x534C5453
+        private const val STLS_VERSION = 0x01000000
         private const val VERSION = 0x01000001
         private const val MAX_DATA = 256 * 1024
         private val SHA1_PREFIX = byteArrayOf(0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14)

@@ -8,6 +8,9 @@ A11Y="$PKG/$PKG.system.AuraService"
 echo "• Permissions (Wi-Fi scanning / Bluetooth discovery need location; visualiser needs audio)"
 for p in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION RECORD_AUDIO; do adb shell pm grant $PKG android.permission.$p || true; done
 
+echo "• Let VeloCinema switch on Wireless debugging by itself after reboots (keeps the system connection alive)"
+adb shell pm grant $PKG android.permission.WRITE_SECURE_SETTINGS || true
+
 echo "• Allow over-Wi-Fi self updates + compile VeloCinema to native code"
 adb shell appops set $PKG REQUEST_INSTALL_PACKAGES allow || true
 adb shell cmd package compile -m speed -f $PKG >/dev/null || true
@@ -32,4 +35,5 @@ bash "$(dirname "$0")/make-default.sh"
 echo "• Power-features bridge (adb over 127.0.0.1:5555 – resets when the Chromecast reboots)"
 adb tcpip 5555 >/dev/null && sleep 3
 adb wait-for-usb-device 2>/dev/null || true
-echo "Done. On the TV: Настройки на VeloCinema → Разширени функции → OK, then allow \"velocinema@launcher\" (tick Always allow)."
+echo "Done. On the TV: Настройки на VeloCinema → Разширени функции → OK, allow \"velocinema@launcher\" (tick Always allow)."
+echo "After the next reboot the TV may ask once: Allow wireless debugging on this network? → tick Always allow."

@@ -51,12 +51,24 @@ object StockLauncher {
     fun disable(ctx: Context) {
         if (!wanted) return
         val b = Aura.app.bridge
-        if (b.ready) { b.shell("pm disable-user --user 0 $LX"); Aura.prefs.edit().putBoolean("stockPending", false).apply() }
-        else Aura.prefs.edit().putBoolean("stockPending", true).apply()
+        if (b.ready) { b.shell("pm disable-user --user 0 $LX"); Aura.prefs.edit().putBoolean("stockPending", false).apply(); return }
+        Aura.prefs.edit().putBoolean("stockPending", true).apply()
+        // Try the bridge again (it can bring up wireless debugging by itself); meanwhile keep Google's
+        // launcher from sitting in RAM.
+        b.shell("pm disable-user --user 0 $LX") { out -> if (out != null) Aura.prefs.edit().putBoolean("stockPending", false).apply() }
+        killStock(ctx)
     }
 
-    /** Called on start-up: finish a pending re-disable if possible. */
+    /** Called on start-up / when Google's home shows up: switch it off again if we can, else stop it. */
     fun enforce(ctx: Context) {
-        if (wanted && !disabled(ctx) && Aura.app.bridge.ready) disable(ctx)
+        if (!wanted || disabled(ctx)) return
+        val b = Aura.app.bridge
+        b.shell("pm disable-user --user 0 $LX") { out ->
+            if (out != null) Aura.prefs.edit().putBoolean("stockPending", false).apply() else killStock(ctx)
+        }
+    }
+
+    fun killStock(ctx: Context) {
+        try { ctx.getSystemService(android.app.ActivityManager::class.java).killBackgroundProcesses(LX) } catch (_: Throwable) { }
     }
 }

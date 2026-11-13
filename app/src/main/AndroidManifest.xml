@@ -16,6 +16,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <!-- granted once via adb (tools/privacy.sh) for the optional tracker-blocking DNS switch -->
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
 
