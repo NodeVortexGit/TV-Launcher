@@ -52,7 +52,7 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
     private fun cycle(title: String, icon: Int, values: List<Int>, current: () -> Int, label: (Int) -> String, set: (Int) -> Unit) =
         ListRow(ctx, title, "◀ ▶ за промяна", icon).apply {
             trailingText(label(current()))
-            val step = { d: Int -> val i = (values.indexOf(current()) + d + values.size) % values.size; set(values[i]); trailingText(label(values[i])) }
+            val step = { d: Int -> val i = (values.indexOf(current()) + d + values.size) % values.size; set(values[i]); trailingText(label(values[i])); com.nodevortex.aura.system.NavSound.move() }
             setOnClickListener { step(1) }
             setOnKeyListener { _, code, e ->
                 if (e.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
@@ -80,13 +80,21 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
 
         section("Звук, известия и скрийнсейвър")
         val nav = com.nodevortex.aura.system.NavSound
-        row(ListRow(ctx, "Звук при движение с дистанционното", navSub(), R.drawable.ic_volume).apply {
-            trailingToggle(nav.systemOn(ctx))
-            setOnClickListener {
-                nav.setSystem(ctx, !nav.systemOn(ctx)) { ok ->
+        row(ListRow(ctx, "Звуци при навигация", navSub(), R.drawable.ic_volume).apply {
+            val names = mapOf(nav.VELO to "VeloCinema", nav.GOOGLE to "Google", nav.OFF to "Без звук")
+            trailingText(names[nav.mode()] ?: "")
+            val step = { d: Int ->
+                val order = listOf(nav.VELO, nav.GOOGLE, nav.OFF)
+                val next = order[(order.indexOf(nav.mode()) + d + order.size) % order.size]
+                nav.setMode(ctx, next) { ok ->
                     if (!ok) toast(ctx, "Не може да се промени — включете „Свързване със системата“ по-долу")
-                    trailingToggle(nav.systemOn(ctx)); setSubtitle(navSub())
+                    trailingText(names[nav.mode()] ?: ""); setSubtitle(navSub())
                 }
+            }
+            setOnClickListener { step(1) }
+            setOnKeyListener { _, code, e ->
+                if (e.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+                when (code) { KeyEvent.KEYCODE_DPAD_LEFT -> { step(-1); true }; KeyEvent.KEYCODE_DPAD_RIGHT -> { step(1); true }; else -> false }
             }
         })
         row(toggle("Плъзгач за звука на VeloCinema", "Натиснете OK, докато се вижда, за да смените слушалки/тонколони", "customVolume", true, R.drawable.ic_volume))
@@ -167,8 +175,11 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
         row(ListRow(ctx, "VeloCinema 1.2", "Началният екран на този телевизор", R.drawable.ic_info))
     }
 
-    private fun navSub() = if (com.nodevortex.aura.system.NavSound.systemOn(ctx)) "Включен — звукът „поп“ при всяко движение, на целия телевизор"
-        else "Изключен навсякъде на телевизора"
+    private fun navSub() = when (com.nodevortex.aura.system.NavSound.mode()) {
+        com.nodevortex.aura.system.NavSound.VELO -> "Звуците на VeloCinema · ◀ ▶ за промяна (в другите приложения е тихо)"
+        com.nodevortex.aura.system.NavSound.GOOGLE -> "Звукът „поп“ на Google, на целия телевизор · ◀ ▶ за промяна"
+        else -> "Без звук навсякъде · ◀ ▶ за промяна"
+    }
 
     private fun lockSub() = if (Lock.enabled) "Включено — само профилът „${Lock.displayName(Lock.owner)}“ иска ПИН" else "Изключено"
 

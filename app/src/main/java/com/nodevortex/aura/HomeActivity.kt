@@ -97,6 +97,7 @@ class HomeActivity : Activity() {
         buildPages()
         buildTopBar()
         setContentView(root)
+        com.nodevortex.aura.system.NavSound.attach(this)
         root.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         ambient.setColor(0xFF4A5A7A.toInt(), immediate = true)
 
@@ -508,6 +509,8 @@ class HomeActivity : Activity() {
 
     private fun moveBy(code: Int) {
         val t = moving ?: return
+        // The tile is re-added below (focus hops): play one move sound ourselves instead.
+        com.nodevortex.aura.system.NavSound.manualMove()
         val from = grid.indexOfChild(t)
         val cols = grid.columns
         val to = when (code) {
@@ -518,6 +521,7 @@ class HomeActivity : Activity() {
             else -> from
         }.coerceIn(0, grid.childCount - 1)
         if (to == from) return
+        com.nodevortex.aura.system.NavSound.move()
         val before = grid.snapshot()
         app.layout.items.add(to, app.layout.items.removeAt(from))
         grid.removeView(t); grid.addView(t, to)
@@ -532,6 +536,7 @@ class HomeActivity : Activity() {
     fun openQuickSettings(page: String?) = panels.open(QuickSettingsPanel(panels, this, page))
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        com.nodevortex.aura.system.NavSound.onKey(this, event)
         if (moving != null && event.action == KeyEvent.ACTION_DOWN) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> { moveBy(event.keyCode); return true }

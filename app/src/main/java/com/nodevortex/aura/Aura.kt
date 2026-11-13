@@ -28,6 +28,7 @@ class Aura : Application() {
         app = this
         prefs = getSharedPreferences("aura", MODE_PRIVATE)
         Fonts.init()
+        com.nodevortex.aura.system.NavSound.init(this)
         apps = AppRepository(this)
         layout = HomeLayout(prefs)
         channels = Channels(this)

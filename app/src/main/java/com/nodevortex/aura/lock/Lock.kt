@@ -205,6 +205,7 @@ class RowPinPad(ctx: Context, private val length: Int = 4, private val onComplet
     private fun changeRow(d: Int) {
         val nr = (row + d).coerceIn(0, rows.size - 1)
         if (nr == row) { rowSpring.nudge(d * 2.5f); return }
+        com.nodevortex.aura.system.NavSound.move()
         row = nr; render()
         rowSpring.snapTo(d.toFloat()); rowSpring.animateTo(0f)
     }
@@ -213,6 +214,7 @@ class RowPinPad(ctx: Context, private val length: Int = 4, private val onComplet
         val digit = rows[row][col]
         if (digit.isEmpty()) return
         keys[col].press()
+        com.nodevortex.aura.system.NavSound.confirm()
         entered.append(digit); dots.count = entered.length
         if (entered.length >= length) {
             val pin = entered.toString()
@@ -239,6 +241,7 @@ class RowPinPad(ctx: Context, private val length: Int = 4, private val onComplet
                 }
             }
             in KeyEvent.KEYCODE_0..KeyEvent.KEYCODE_9 -> {
+                com.nodevortex.aura.system.NavSound.confirm()
                 entered.append(keyCode - KeyEvent.KEYCODE_0); dots.count = entered.length
                 if (entered.length >= length) { val pin = entered.toString(); postDelayed({ onComplete(pin) }, 140) }
             }
@@ -313,6 +316,7 @@ class LockActivity : Activity() {
         root.addView(ImageView(this).apply { setImageResource(R.drawable.logo); adjustViewBounds = true; alpha = 0.85f },
             flp(WRAP, 54.dp, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).margins(b = 36.dp))
         setContentView(root)
+        com.nodevortex.aura.system.NavSound.attach(this)
         buildProfiles()
     }
 
@@ -380,6 +384,11 @@ class LockActivity : Activity() {
     override fun onResume() { super.onResume(); Lock.showing = true }
     override fun onPause() { super.onPause(); if (isFinishing) Lock.showing = false }
     override fun onStop() { super.onStop(); Lock.showing = false; if (!isFinishing && Lock.required()) Lock.show(this) }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        com.nodevortex.aura.system.NavSound.onKey(this, event)
+        return super.dispatchKeyEvent(event)
+    }
 
     @Deprecated("Back is handled by the pad / ignored here")
     override fun onBackPressed() { if (pad != null) hidePad() }
