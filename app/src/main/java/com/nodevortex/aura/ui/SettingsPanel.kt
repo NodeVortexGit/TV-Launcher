@@ -79,6 +79,16 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
             if (stock.auraIsDefault(ctx)) "Да — и след рестарт. Google TV се включва само за смяна на профил" else "Не — пуснете tools/make-default.sh от компютъра", R.drawable.ic_check))
 
         section("Звук, известия и скрийнсейвър")
+        val nav = com.nodevortex.aura.system.NavSound
+        row(ListRow(ctx, "Звук при движение с дистанционното", navSub(), R.drawable.ic_volume).apply {
+            trailingToggle(nav.systemOn(ctx))
+            setOnClickListener {
+                nav.setSystem(ctx, !nav.systemOn(ctx)) { ok ->
+                    if (!ok) toast(ctx, "Не може да се промени — включете „Свързване със системата“ по-долу")
+                    trailingToggle(nav.systemOn(ctx)); setSubtitle(navSub())
+                }
+            }
+        })
         row(toggle("Плъзгач за звука на VeloCinema", "Натиснете OK, докато се вижда, за да смените слушалки/тонколони", "customVolume", true, R.drawable.ic_volume))
         row(toggle("Известия върху всяко приложение", null, "popups", true, R.drawable.ic_bell))
         row(toggle("Батерия на слушалките при свързване", "Galaxy Buds показват ляво / дясно / кутия", "budsPopup", true, R.drawable.ic_headphones))
@@ -156,6 +166,9 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
         section("Информация")
         row(ListRow(ctx, "VeloCinema 1.2", "Началният екран на този телевизор", R.drawable.ic_info))
     }
+
+    private fun navSub() = if (com.nodevortex.aura.system.NavSound.systemOn(ctx)) "Включен — звукът „поп“ при всяко движение, на целия телевизор"
+        else "Изключен навсякъде на телевизора"
 
     private fun lockSub() = if (Lock.enabled) "Включено — само профилът „${Lock.displayName(Lock.owner)}“ иска ПИН" else "Изключено"
 
