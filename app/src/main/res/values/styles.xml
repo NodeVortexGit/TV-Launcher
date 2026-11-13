@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#FF090B0F</color>
+    <style name="Aura" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:colorBackground">@color/bg</item>
+        <item name="android:colorAccent">#FF8AB4F8</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowAnimationStyle">@style/AuraAnim</item>
+    </style>
+    <style name="Aura.Saver">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowAnimationStyle">@style/AuraFade</item>
+    </style>
+    <style name="AuraAnim" parent="@android:style/Animation.Activity" />
+    <style name="AuraFade" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@android:anim/fade_in</item>
+        <item name="android:activityCloseExitAnimation">@android:anim/fade_out</item>
+    </style>
+    <string name="a11y_desc">Aura: custom volume slider with output switching, notification pop-ups, earbuds battery card, sleep timer countdown, music visualiser and profile lock.</string>
+</resources>
