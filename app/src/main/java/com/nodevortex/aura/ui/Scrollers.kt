@@ -59,6 +59,18 @@ open class SpringScrollV(ctx: Context) : FrameLayout(ctx) {
 
     override fun requestChildRectangleOnScreen(child: View, rectangle: Rect, immediate: Boolean) = false
 
+    private val focusables = ArrayList<View>()
+    private fun isLastFocusable(v: View, bottom: Int): Boolean {
+        val c = getChildAt(0) ?: return false
+        focusables.clear(); c.addFocusables(focusables, View.FOCUS_DOWN)
+        for (f in focusables) {
+            if (f === v || !f.isShown) continue
+            tmp.set(0, 0, f.width, f.height); offsetDescendantRectToMyCoords(f, tmp)
+            if (tmp.bottom > bottom + 2) { focusables.clear(); return false }
+        }
+        focusables.clear(); return true
+    }
+
     fun reveal(v: View, immediate: Boolean = false) {
         tmp.set(0, 0, v.width, v.height)
         offsetDescendantRectToMyCoords(v, tmp)
@@ -72,7 +84,11 @@ open class SpringScrollV(ctx: Context) : FrameLayout(ctx) {
             if (top - marginTop < cur) target = (top - marginTop).toFloat()
             else if (bottom + marginBottom > cur + height) target = (bottom + marginBottom - height).toFloat()
         }
-        target = target.coerceIn(0f, maxScroll().toFloat())
+        // On the last focusable item, scroll right to the end so anything below it (a footer, a logo,
+        // a note) comes into view too – nothing focusable would ever scroll there otherwise.
+        val max = maxScroll().toFloat()
+        if (anchor < 0 && max - target > 0f && max - target < height * 0.6f && isLastFocusable(v, bottom)) target = max
+        target = target.coerceIn(0f, max)
         if (immediate) spring.snapTo(target) else spring.animateTo(target)
     }
 

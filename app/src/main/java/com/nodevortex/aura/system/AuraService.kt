@@ -68,6 +68,8 @@ class AuraService : AccessibilityService() {
         // After a reboot Google TV's home is already showing when we connect: take over.
         Aura.main.postDelayed({ if (activeIsStockHome()) goHome() }, 1500)
         Aura.main.postDelayed({ StockLauncher.enforce(this) }, 4000)
+        // After a reboot the cast service still needs its credentials once (see CastCreds).
+        Aura.main.postDelayed({ CastCreds.check(force = true) }, 45_000)
     }
 
     override fun onDestroy() {
@@ -85,6 +87,7 @@ class AuraService : AccessibilityService() {
         val p = e.packageName?.toString() ?: return
         val cls = e.className?.toString() ?: ""
         if (p == LX && cls.endsWith("Activity")) lxScreen = cls
+        if (p == StockLauncher.SETUP && cls.endsWith("RecoveryActivity")) { goHome(); return }
         if (p == LX && cls.endsWith(".home.HomeActivity")) {
             // Google TV forces its own home; make Aura the real home screen.
             if (switching == null && SystemClock.elapsedRealtime() > allowStockUntil && Aura.prefs.getBoolean("homeOverride", true) && !Lock.showing) {
@@ -469,7 +472,7 @@ class AuraService : AccessibilityService() {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
                 Intent.ACTION_SCREEN_OFF -> { Lock.onScreenOff(); volume.hide() }
-                Intent.ACTION_SCREEN_ON -> { lastInput = SystemClock.elapsedRealtime(); if (Lock.required()) Lock.show(c) }
+                Intent.ACTION_SCREEN_ON -> { lastInput = SystemClock.elapsedRealtime(); if (Lock.required()) Lock.show(c); CastCreds.check() }
                 BluetoothDevice.ACTION_ACL_CONNECTED -> {
                     val d: BluetoothDevice = i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) ?: return
                     cachedOut = null

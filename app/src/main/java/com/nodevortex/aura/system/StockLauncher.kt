@@ -17,8 +17,10 @@ object StockLauncher {
     const val LX = "com.google.android.apps.tv.launcherx"
     const val SETUP = "com.google.android.tungsten.setupwraith"
 
-    fun disabled(ctx: Context): Boolean = try {
-        val st = ctx.packageManager.getApplicationEnabledSetting(LX)
+    fun disabled(ctx: Context): Boolean = isOff(ctx, LX)
+
+    private fun isOff(ctx: Context, pkg: String): Boolean = try {
+        val st = ctx.packageManager.getApplicationEnabledSetting(pkg)
         st == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER || st == PackageManager.COMPONENT_ENABLED_STATE_DISABLED
     } catch (_: Throwable) { false }
 
@@ -71,7 +73,10 @@ object StockLauncher {
 
     /** Called on start-up / when Google's home shows up: switch it off again if we can, else stop it. */
     fun enforce(ctx: Context) {
-        if (!wanted || disabled(ctx)) return
+        if (!wanted) return
+        // Google's setup app is switched on only for the cast-credentials moment (CastCreds); never leave it on.
+        if (!isOff(ctx, SETUP) && !CastCreds.busy) Aura.app.bridge.shell("pm disable-user --user 0 $SETUP")
+        if (disabled(ctx)) return
         val b = Aura.app.bridge
         b.shell("pm disable-user --user 0 $LX") { out ->
             if (out != null) Aura.prefs.edit().putBoolean("stockPending", false).apply() else killStock(ctx)
