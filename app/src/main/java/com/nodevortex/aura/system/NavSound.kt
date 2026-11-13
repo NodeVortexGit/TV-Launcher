@@ -24,6 +24,8 @@ object NavSound {
     const val VELO = 0
     const val GOOGLE = 1
     const val OFF = 2
+    /** Playback level of the sounds (1 = as recorded). */
+    private const val VOLUME = 0.9f
 
     private var pool: SoundPool? = null
     private var sMove = 0; private var sConfirm = 0; private var sBack = 0
@@ -86,7 +88,7 @@ object NavSound {
 
     private fun play(id: Int) {
         if (id == 0 || sysOn || Aura.prefs.getInt("navSound", VELO) != VELO) return
-        pool?.play(id, 1f, 1f, 1, 0, 1f)
+        pool?.play(id, VOLUME, VOLUME, 1, 0, 1f)
     }
 
     /**
