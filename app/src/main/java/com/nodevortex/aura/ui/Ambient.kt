@@ -24,6 +24,8 @@ class AmbientBackground(ctx: Context) : View(ctx) {
     private var color = 0
     private var dirty = true
     private var lastFx = -1f
+    private val mA = android.graphics.Matrix()
+    private val mB = android.graphics.Matrix()
 
     private val sL = Spring(0.42f, 55f, 1f, 0.0004f) { dirty = true; invalidate() }
     private val sA = Spring(-0.01f, 55f, 1f, 0.0004f) { dirty = true; invalidate() }
@@ -69,18 +71,23 @@ class AmbientBackground(ctx: Context) : View(ctx) {
         if (w <= 0f) return
         canvas.drawColor(C.bg)
         val dim = 1f - 0.55f * sDim.value
-        if (dirty || sX.value != lastFx) {
+        val fx = sX.value
+        if (dirty) {
+            // colour changed: rebuild the two gradients once, centred at the origin
             color = ColorKit.fromLab(sL.value, sA.value, sB.value)
-            val fx = sX.value
-            lastFx = fx
-            val cx = w * (0.10f + 0.45f * fx)
-            glowA.shader = RadialGradient(cx, -h * 0.18f, w * 0.95f,
+            glowA.shader = RadialGradient(0f, 0f, w * 0.95f,
                 intArrayOf(C.a(color, 0.78f), C.a(color, 0.40f), C.a(color, 0.12f), 0),
                 floatArrayOf(0f, 0.38f, 0.72f, 1f), Shader.TileMode.CLAMP)
             val second = ColorKit.rotate(color, 0.55f, 0.36f)
-            glowB.shader = RadialGradient(w * (1.05f - 0.25f * fx), h * 1.08f, w * 0.62f,
+            glowB.shader = RadialGradient(0f, 0f, w * 0.62f,
                 intArrayOf(C.a(second, 0.40f), C.a(second, 0.12f), 0), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
-            dirty = false
+            dirty = false; lastFx = Float.NaN
+        }
+        if (fx != lastFx) {
+            // the glow only drifts: move the existing gradients instead of allocating new ones
+            lastFx = fx
+            mA.setTranslate(w * (0.10f + 0.45f * fx), -h * 0.18f); glowA.shader?.setLocalMatrix(mA)
+            mB.setTranslate(w * (1.05f - 0.25f * fx), h * 1.08f); glowB.shader?.setLocalMatrix(mB)
         }
         glowA.alpha = (255 * dim).toInt()
         glowB.alpha = (255 * dim).toInt()

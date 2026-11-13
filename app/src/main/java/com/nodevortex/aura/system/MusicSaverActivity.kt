@@ -118,6 +118,16 @@ class MusicSaverActivity : Activity() {
         private val tClock = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 34.dpf; color = 0xCCFFFFFF.toInt(); textAlign = Paint.Align.RIGHT; Fonts.paint(this, 300) }
         private val prog = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND; strokeWidth = 4.dpf }
         private val r = RectF(); private val m = Matrix()
+        // allocation-free drawing: shaders/strings/trig built once, reused every frame
+        private var artShader: BitmapShader? = null
+        private val artSrc = RectF()
+        private var glowShader: RadialGradient? = null
+        private val gm = Matrix()
+        private var titleW = -1f; private var titleTxt = ""; private var artistTxt = ""
+        private var clockSec = -1L; private var clockTxt = ""
+        private val cosT = FloatArray(96); private val sinT = FloatArray(96)
+        private var magBuf = FloatArray(0)
+        init { for (i in 0 until 96) { val ang = (i / 96f) * 2 * PI - PI / 2; cosT[i] = cos(ang).toFloat(); sinT[i] = sin(ang).toFloat() } }
         private val t0 = SystemClock.uptimeMillis()
 
         fun kick() = Choreographer.getInstance().postFrameCallback(this)
@@ -130,7 +140,12 @@ class MusicSaverActivity : Activity() {
                 art = a
                 accent = ColorKit.ambient(ColorKit.accentOf(a), 0.66f, 0.16f)
                 blurred = Bitmap.createScaledBitmap(Bitmap.createScaledBitmap(a, 12, 12, true), 48, 48, true)
+                artShader = BitmapShader(a, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
+                artSrc.set(0f, 0f, a.width.toFloat(), a.height.toFloat())
             }
+            glowShader = RadialGradient(0f, 0f, 1f, intArrayOf(C.a(accent, 1f), C.a(accent, 0f)), null, Shader.TileMode.CLAMP)
+            glow.shader = glowShader
+            titleW = -1f
             invalidate()
         }
 
@@ -152,7 +167,8 @@ class MusicSaverActivity : Activity() {
             val now = SystemClock.uptimeMillis()
             gotFft = now
             val n = fft.size / 2
-            val mags = FloatArray(n)
+            if (magBuf.size != n) magBuf = FloatArray(n)
+            val mags = magBuf
             var total = 0f
             for (k in 1 until n) { mags[k] = hypot(fft[2 * k].toFloat(), fft[2 * k + 1].toFloat()); total += mags[k] }
             if (total < 1f) { silentFrames++; return } else silentFrames = 0
@@ -248,32 +264,38 @@ class MusicSaverActivity : Activity() {
             val dx = sin(t / 23f) * 34.dpf; val dy = cos(t / 31f) * 18.dpf
             val cx = w / 2 + dx; val cy = h * 0.44f + dy
             val size = min(w, h) * 0.40f * (1f + 0.045f * pulse)
-            glow.shader = RadialGradient(cx, cy, size * 1.25f, intArrayOf(C.a(accent, 0.55f + 0.3f * pulse), C.a(accent, 0.0f)), null, Shader.TileMode.CLAMP)
-            c.drawCircle(cx, cy, size * 1.25f, glow)
-            // radial spectrum
+            glowShader?.let {
+                gm.setScale(size * 1.25f, size * 1.25f); gm.postTranslate(cx, cy); it.setLocalMatrix(gm)
+                glow.alpha = (255 * (0.55f + 0.3f * pulse)).toInt().coerceIn(0, 255)
+                c.drawCircle(cx, cy, size * 1.25f, glow)
+            }
+            // radial spectrum (2 × 48 bars, mirrored)
             val n = shown.size
             bar.color = C.a(accent, 0.9f)
             for (i in 0 until n * 2) {
                 val v = shown[if (i < n) i else 2 * n - 1 - i]
-                val ang = (i / (n * 2f)) * 2 * PI - PI / 2
                 val r0 = size * 0.62f; val r1 = r0 + 12.dpf + v * 70.dpf
-                c.drawLine(cx + cos(ang).toFloat() * r0, cy + sin(ang).toFloat() * r0, cx + cos(ang).toFloat() * r1, cy + sin(ang).toFloat() * r1, bar)
+                c.drawLine(cx + cosT[i] * r0, cy + sinT[i] * r0, cx + cosT[i] * r1, cy + sinT[i] * r1, bar)
             }
             for (rp in ripples) { ring.color = C.a(accent, rp[1]); c.drawCircle(cx, cy, size * 0.6f + rp[0], ring) }
             // art
-            val a = art
             r.set(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2)
-            if (a != null) {
-                artPaint.shader = BitmapShader(a, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP).also {
-                    m.setRectToRect(RectF(0f, 0f, a.width.toFloat(), a.height.toFloat()), r, Matrix.ScaleToFit.FILL); it.setLocalMatrix(m)
-                }
+            val sh = artShader
+            if (sh != null) {
+                m.setRectToRect(artSrc, r, Matrix.ScaleToFit.FILL); sh.setLocalMatrix(m)
+                artPaint.shader = sh
                 c.drawRoundRect(r, 30.dpf, 30.dpf, artPaint)
             } else {
                 artPaint.shader = null; artPaint.color = C.surface2; c.drawRoundRect(r, 30.dpf, 30.dpf, artPaint)
             }
+            if (titleW != w) {
+                titleW = w
+                titleTxt = TextUtils.ellipsize(title, tTitle, w * 0.7f, TextUtils.TruncateAt.END).toString()
+                artistTxt = TextUtils.ellipsize(artist, tArtist, w * 0.6f, TextUtils.TruncateAt.END).toString()
+            }
             val ty = cy + size / 2 + 74.dpf
-            c.drawText(TextUtils.ellipsize(title, tTitle, w * 0.7f, TextUtils.TruncateAt.END).toString(), cx, ty, tTitle)
-            c.drawText(TextUtils.ellipsize(artist, tArtist, w * 0.6f, TextUtils.TruncateAt.END).toString(), cx, ty + 36.dpf, tArtist)
+            c.drawText(titleTxt, cx, ty, tTitle)
+            c.drawText(artistTxt, cx, ty + 36.dpf, tArtist)
             now?.let { nw ->
                 if (nw.duration > 0) {
                     val pw = 360.dpf; val py = ty + 66.dpf
@@ -283,7 +305,9 @@ class MusicSaverActivity : Activity() {
                     c.drawLine(cx - pw / 2, py, cx - pw / 2 + pw * f, py, prog)
                 }
             }
-            c.drawText(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date()), w - 56.dpf + dx * 0.3f, 76.dpf, tClock)
+            val sec = System.currentTimeMillis() / 1000
+            if (sec != clockSec) { clockSec = sec; clockTxt = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date()) }
+            c.drawText(clockTxt, w - 56.dpf + dx * 0.3f, 76.dpf, tClock)
         }
     }
 }

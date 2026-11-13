@@ -39,11 +39,15 @@ object Text {
 
     fun tokens(s: String): List<String> = norm(s).split(' ').filter { it.isNotEmpty() }
 
-    /** Levenshtein distance with early exit. */
+    private val bufs = ThreadLocal.withInitial { arrayOf(IntArray(64), IntArray(64)) }
+
+    /** Levenshtein distance with early exit; reuses per-thread buffers (called a lot by search). */
     fun distance(a: String, b: String, max: Int): Int {
         if (kotlin.math.abs(a.length - b.length) > max) return max + 1
-        var prev = IntArray(b.length + 1) { it }
-        var cur = IntArray(b.length + 1)
+        val pair = bufs.get()!!
+        if (pair[0].size <= b.length) { pair[0] = IntArray(b.length + 16); pair[1] = IntArray(b.length + 16) }
+        var prev = pair[0]; var cur = pair[1]
+        for (j in 0..b.length) prev[j] = j
         for (i in 1..a.length) {
             cur[0] = i
             var rowMin = cur[0]

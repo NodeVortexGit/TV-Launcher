@@ -36,6 +36,17 @@ class Aura : Application() {
         EpgJob.schedule(this)
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Launcher in the background and the TV short on RAM: give memory back (all of it is rebuildable).
+        when {
+            level >= TRIM_MEMORY_COMPLETE -> { apps.trimIcons(hard = true); epg.trim() }
+            level >= TRIM_MEMORY_MODERATE -> { apps.trimIcons(hard = true) }
+            level >= TRIM_MEMORY_BACKGROUND -> apps.trimIcons(hard = false)
+            level == TRIM_MEMORY_RUNNING_CRITICAL -> epg.trim()
+        }
+    }
+
     companion object {
         lateinit var app: Aura
             private set

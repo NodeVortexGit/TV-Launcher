@@ -113,7 +113,7 @@ class AppRepository(private val ctx: Context) {
             pending[k] = mutableListOf(cb)
         }
         Aura.io.execute {
-            val bmp = try { render(e, size) } catch (t: Throwable) { fallback(e, size) }
+            val bmp = loadDisk(e, size) ?: (try { render(e, size).also { saveDisk(e, size, it) } } catch (t: Throwable) { fallback(e, size) })
             icons.put(k, bmp)
             val cbs = synchronized(pending) { pending.remove(k) } ?: return@execute
             Aura.ui { cbs.forEach { it(bmp) } }
@@ -121,6 +121,42 @@ class AppRepository(private val ctx: Context) {
     }
 
     fun cachedIcon(e: AppEntry, size: Int): Bitmap? = icons.get("${e.key}@$size")
+
+    // ---------------------------------------------------------------- disk cache
+    // Rendering an icon (high-density drawable → square tile + accent colour) takes tens of ms;
+    // the launcher gets killed often on a 1.4 GB TV, so cold starts read the finished tiles from disk.
+    private val diskDir by lazy { java.io.File(ctx.cacheDir, "icons").apply { mkdirs() } }
+    private val accents by lazy { ctx.getSharedPreferences("icon_accents", Context.MODE_PRIVATE) }
+
+    private fun diskName(e: AppEntry, size: Int): String? = try {
+        val pi = ctx.packageManager.getPackageInfo(e.pkg, 0)
+        "${e.pkg}_${e.cls.hashCode().toUInt()}_${pi.longVersionCode}_${pi.lastUpdateTime}_$size.png"
+    } catch (_: Throwable) { null }
+
+    private fun loadDisk(e: AppEntry, size: Int): Bitmap? {
+        val name = diskName(e, size) ?: return null
+        val f = java.io.File(diskDir, name)
+        if (!f.exists() || !accents.contains(name)) return null
+        val b = try { android.graphics.BitmapFactory.decodeFile(f.path) } catch (_: Throwable) { null } ?: return null
+        e.accent = accents.getInt(name, e.accent)
+        return b
+    }
+
+    private fun saveDisk(e: AppEntry, size: Int, b: Bitmap) {
+        val name = diskName(e, size) ?: return
+        try {
+            java.io.File(diskDir, name).outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            accents.edit().putInt(name, e.accent).apply()
+            diskDir.listFiles()?.let { all ->
+                // drop stale versions of this app's tile and keep the cache bounded
+                all.filter { it.name.startsWith("${e.pkg}_") && it.name.endsWith("_$size.png") && it.name != name }.forEach { it.delete(); accents.edit().remove(it.name).apply() }
+                if (all.size > 400) all.sortedBy { it.lastModified() }.take(all.size - 300).forEach { it.delete() }
+            }
+        } catch (_: Throwable) { }
+    }
+
+    /** Called on memory pressure: tiles can be re-read from disk cheaply. */
+    fun trimIcons(hard: Boolean) { if (hard) icons.evictAll() else icons.trimToSize(icons.maxSize() / 2) }
 
     private fun loadDrawable(e: AppEntry): Drawable? {
         val pm = ctx.packageManager

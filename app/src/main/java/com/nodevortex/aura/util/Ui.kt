@@ -46,6 +46,8 @@ object C {
 object Fonts {
     lateinit var base: Typeface
     private var variable = false
+    /** One Typeface per weight. Setting variation settings per view creates a new native font each time. */
+    private val byWeight = HashMap<Int, Typeface>()
 
     fun init() {
         val flex = Typeface.create("google-sans-flex", Typeface.NORMAL)
@@ -57,19 +59,21 @@ object Fonts {
         }
     }
 
-    fun apply(tv: TextView, weight: Int) {
-        tv.typeface = base
-        if (!(variable && tv.setFontVariationSettings("'wght' $weight"))) {
-            tv.typeface = Typeface.create(base, weight.coerceIn(100, 900), false)
-        }
+    fun of(weight: Int): Typeface {
+        val w = (weight / 10) * 10
+        byWeight[w]?.let { return it }
+        val tf = if (variable) {
+            val p = android.graphics.Paint()
+            p.typeface = base
+            if (p.setFontVariationSettings("'wght' $w")) p.typeface else Typeface.create(base, w.coerceIn(100, 900), false)
+        } else Typeface.create(base, w.coerceIn(100, 900), false)
+        byWeight[w] = tf
+        return tf
     }
 
-    fun paint(p: android.graphics.Paint, weight: Int) {
-        p.typeface = base
-        if (!(variable && p.setFontVariationSettings("'wght' $weight"))) {
-            p.typeface = Typeface.create(base, weight.coerceIn(100, 900), false)
-        }
-    }
+    fun apply(tv: TextView, weight: Int) { tv.typeface = of(weight) }
+
+    fun paint(p: android.graphics.Paint, weight: Int) { p.typeface = of(weight) }
 }
 
 fun roundRect(color: Int, radius: Float, stroke: Int = 0, strokeColor: Int = 0) = GradientDrawable().apply {

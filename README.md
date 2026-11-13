@@ -22,8 +22,7 @@ A custom home screen for Android TV / Google TV 14, written in plain Kotlin + An
 
 ## Build & install
 ```
-JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+tools/install.sh          # builds the R8-optimised release APK; installs via adb (+ AOT compile) or over Wi-Fi
 tools/setup.sh            # permissions, helper service, notification access, real default home
 tools/push-update.sh      # later updates over Wi-Fi (no USB needed)
 tools/privacy.sh          # optional: switch off Google feedback/error reporting

@@ -3,7 +3,7 @@
 # Usage: tools/push-update.sh [tv-ip]   (finds the TV on the local network if no IP is given)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-APK=app/build/outputs/apk/debug/app-debug.apk
+APK=app/build/outputs/apk/release/app-release.apk
 IP=${1:-}
 if [ -z "$IP" ]; then
   NET=$(ip -4 -o addr show | awk '!/ lo /{print $4}' | head -1 | cut -d. -f1-3)

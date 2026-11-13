@@ -80,6 +80,7 @@ object Signals {
         load()
         if (query.isBlank()) return
         choices += Choice(query.trim(), kind, target, System.currentTimeMillis())
+        priorMemo.clear()
         save()
     }
 
@@ -133,8 +134,16 @@ object Signals {
         return m
     }
 
-    /** Overall preference for a package right now: launches, plays and this hour of day. */
+    private val priorMemo = HashMap<String, Pair<Long, Float>>()
+
+    /** Overall preference for a package right now: launches, plays and this hour of day (memoised 15 s). */
     @Synchronized fun prior(pkg: String): Float {
+        val now = System.currentTimeMillis()
+        priorMemo[pkg]?.let { (t, v) -> if (now - t < 15_000) return v }
+        return computePrior(pkg).also { priorMemo[pkg] = now to it }
+    }
+
+    private fun computePrior(pkg: String): Float {
         load()
         val (launches, last) = Aura.app.apps.usage(Aura.app.apps.byPackage(pkg)?.key ?: "")
         val playCount = plays.filter { it.pkg == pkg }.sumOf { it.count }

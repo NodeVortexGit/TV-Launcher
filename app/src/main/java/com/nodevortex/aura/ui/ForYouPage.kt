@@ -70,6 +70,8 @@ class ForYouPage(private val act: HomeActivity) {
     private val time = SimpleDateFormat("HH:mm", Locale("bg"))
     private val day = SimpleDateFormat("EEE, d MMM", Locale("bg"))
     private val mediaListener: (MediaWatcher.Now?) -> Unit = { if (scroll.isShown && builtAt > 0) buildPlaying() }
+    private var playingKey: String? = null
+    private var playingCard: Card? = null
 
     init {
         col.setPadding(0, 14.dp, 0, 60.dp)
@@ -120,11 +122,21 @@ class ForYouPage(private val act: HomeActivity) {
     }
 
     private fun buildPlaying() {
-        playing.clear()
         val n = MediaWatcher.now
+        val key = n?.let { it.pkg + "|" + it.title + "|" + it.artist }
+        val existing = playingCard
+        if (n != null && key == playingKey && existing != null) {
+            // same track: just refresh state, no new views
+            existing.setBadge(if (n.playing) "ВЪРВИ" else "ПАУЗА")
+            if (n.duration > 0) existing.setProgress(n.positionNow().toFloat() / n.duration)
+            return
+        }
+        playingKey = key; playingCard = null
+        playing.clear()
         playing.visibility = if (n == null) View.GONE else View.VISIBLE
         if (n == null) return
         val c = Card(ctx, 380.dp, 200.dp, false)
+        playingCard = c
         c.setImage(n.art)
         c.title.text = n.title; c.subtitle.text = n.artist
         c.setBadge(if (n.playing) "ВЪРВИ" else "ПАУЗА")

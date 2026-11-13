@@ -124,6 +124,7 @@ class HomeActivity : Activity() {
         updateClock()
         if (Lock.required()) Lock.show(this)
         com.nodevortex.aura.system.StockLauncher.enforce(this)
+        compileIfNew()
         if (tab == 1) forYou?.tick()
     }
 
@@ -319,6 +320,14 @@ class HomeActivity : Activity() {
         incoming.animate().alpha(1f).translationX(0f).setDuration(280).setInterpolator(com.nodevortex.aura.util.Motion.decel).start()
         outgoing.animate().alpha(0f).translationX(-40.dpf * dir).setDuration(140).withEndAction { outgoing.visibility = View.INVISIBLE }.start()
         if (t == 0) grid.getChildAt(grid.lastFocused)?.let { onTileFocused(it as TileView) }
+    }
+
+    /** After an over-Wi-Fi update, ask ART (via the shell bridge) to compile Aura fully to native code. */
+    private fun compileIfNew() {
+        val v = try { packageManager.getPackageInfo(packageName, 0).longVersionCode } catch (_: Throwable) { return }
+        if (Aura.prefs.getLong("compiledVersion", -1) == v || !app.bridge.ready) return
+        Aura.prefs.edit().putLong("compiledVersion", v).apply()
+        Aura.main.postDelayed({ app.bridge.shell("cmd package compile -m speed -f $packageName", 180_000) }, 20_000)
     }
 
     override fun onTrimMemory(level: Int) {
@@ -599,14 +608,22 @@ class NowPlayingPill(private val act: HomeActivity) : LinearLayout(act) {
         spring.snapTo(0f)
     }
 
+    private var boundKey: String? = null
+
     fun bind(n: MediaWatcher.Now?) {
         now = n
         if (n == null) {
+            boundKey = null
             if (visibility == VISIBLE) animate().alpha(0f).setDuration(200).withEndAction { visibility = GONE }.start()
             return
         }
-        title.text = n.title; sub.text = n.artist.ifEmpty { appName(n.pkg) }
-        if (n.art != null) art.setImageBitmap(n.art) else art.setImageResource(R.drawable.ic_music)
+        // Spotify reports state changes often; only touch text/art (and trigger a relayout) on a new track.
+        val key = n.pkg + "|" + n.title + "|" + n.artist + "|" + System.identityHashCode(n.art)
+        if (key != boundKey) {
+            boundKey = key
+            title.text = n.title; sub.text = n.artist.ifEmpty { appName(n.pkg) }
+            if (n.art != null) art.setImageBitmap(n.art) else art.setImageResource(R.drawable.ic_music)
+        }
         eq.playing = n.playing
         if (visibility != VISIBLE) { visibility = VISIBLE; alpha = 0f; translationX = 30.dpf; animate().alpha(1f).translationX(0f).setDuration(320).start() }
     }
@@ -615,7 +632,7 @@ class NowPlayingPill(private val act: HomeActivity) : LinearLayout(act) {
 
     private class Eq(ctx: Context) : View(ctx) {
         var playing = false
-            set(v) { field = v; invalidate() }
+            set(v) { if (field != v) { field = v; invalidate() } }
         var color = C.text
             set(v) { field = v; invalidate() }
         private val p = Paint(Paint.ANTI_ALIAS_FLAG)

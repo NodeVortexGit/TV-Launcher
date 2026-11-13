@@ -20,18 +20,24 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.zip.GZIPInputStream
 
-class Prog(val start: Long, val stop: Long, val ch: String, val title: String, val desc: String) {
+/** Per-title data shared by every airing of the same programme (titles repeat a lot). */
+class TitleInfo(val title: String) {
     /** Programme name without the "- Филм / US / 2004" style suffix. */
-    val name: String get() = title.substringBefore(" - ").trim()
+    val name: String = title.substringBefore(" - ").trim()
     val detail: String get() = title.substringAfter(" - ", "").trim()
-    val tokens: List<String> by lazy { Text.tokens(name).map(Text::squash) }
-    val isMovie: Boolean by lazy {
-        val t = title + " " + desc.take(160)
-        MOVIE.containsMatchIn(t)
-    }
+    val tokens: List<String> by lazy(LazyThreadSafetyMode.NONE) { Text.tokens(name).map(Text::squash) }
+}
+
+/** One airing. Kept small: ~30 000 of these live in RAM on a 1.4 GB TV. */
+class Prog(val start: Long, val stop: Long, val ch: String, val info: TitleInfo, val isMovie: Boolean) {
+    val title: String get() = info.title
+    val name: String get() = info.name
+    val detail: String get() = info.detail
+    val tokens: List<String> get() = info.tokens
     fun isLive(now: Long) = now in start until stop
     companion object {
         private val MOVIE = Regex("(?i)(филм|film\\b|игрален|/\\s*[A-Z]{2}\\s*/\\s*(19|20)\\d\\d|\\((САЩ|Великобритания|Франция|Германия|Италия|Канада|Испания|Австралия|Индия)[^)]*(19|20)\\d\\d)")
+        fun movie(title: String, desc: String) = MOVIE.containsMatchIn(title) || MOVIE.containsMatchIn(desc.take(160))
     }
 }
 
@@ -59,9 +65,13 @@ class Epg(private val ctx: Context) {
         synchronized(lock) {
             cache?.let { return it }
             val out = ArrayList<Prog>(32000)
+            val titles = HashMap<String, TitleInfo>(8192)
+            val chans = HashMap<String, String>(256)
             val cutoff = System.currentTimeMillis() - 8L * 24 * 3600_000
             dir.listFiles { f -> f.name.endsWith(".tsv") }?.sortedBy { it.name }?.forEach { f ->
-                f.bufferedReader(Charsets.UTF_8, 64 * 1024).useLines { lines -> lines.forEach { line -> parseLine(line)?.let { if (it.stop > cutoff) out.add(it) } } }
+                f.bufferedReader(Charsets.UTF_8, 64 * 1024).useLines { lines ->
+                    lines.forEach { line -> parseLine(line, titles, chans)?.let { if (it.stop > cutoff) out.add(it) } }
+                }
             }
             out.trimToSize()
             cache = out; cacheAt = System.currentTimeMillis(); nowCache = null
@@ -74,14 +84,19 @@ class Epg(private val ctx: Context) {
 
     @Volatile private var nowCache: Pair<Long, Map<String, Prog>>? = null
 
-    private fun parseLine(l: String): Prog? {
+    private fun parseLine(l: String, titles: HashMap<String, TitleInfo>, chans: HashMap<String, String>): Prog? {
         val a = l.indexOf('\t'); if (a < 0) return null
         val b = l.indexOf('\t', a + 1); if (b < 0) return null
         val c = l.indexOf('\t', b + 1); if (c < 0) return null
         val d = l.indexOf('\t', c + 1)
         return try {
-            Prog(l.substring(0, a).toLong() * 1000, l.substring(a + 1, b).toLong() * 1000, l.substring(b + 1, c).intern(),
-                if (d < 0) l.substring(c + 1) else l.substring(c + 1, d), if (d < 0) "" else l.substring(d + 1))
+            val start = l.substring(0, a).toLong() * 1000; val stop = l.substring(a + 1, b).toLong() * 1000
+            val chRaw = l.substring(b + 1, c)
+            val ch = chans.getOrPut(chRaw) { chRaw }
+            val title = if (d < 0) l.substring(c + 1) else l.substring(c + 1, d)
+            val info = titles.getOrPut(title) { TitleInfo(title) }
+            val movie = Prog.movie(title, if (d < 0) "" else l.substring(d + 1, minOf(l.length, d + 1 + 160)))
+            Prog(start, stop, ch, info, movie)
         } catch (_: NumberFormatException) { null }
     }
 
@@ -103,19 +118,23 @@ class Epg(private val ctx: Context) {
         val now = System.currentTimeMillis()
         val weekAgo = now - 7L * 24 * 3600_000
         val hits = HashMap<String, EpgHit>()
+        val memo = HashMap<TitleInfo, Pair<Float, String?>>(4096)
         for (p in all()) {
             if (p.stop < weekAgo) continue
-            var best = if (qt.isEmpty()) 0f else Text.score(qt, p.tokens)
-            var via: String? = null
-            for ((t, toks) in alt) {
-                val s = Text.score(toks, p.tokens)
-                if (s > best + 0.05f) { best = s; via = t }
+            val (base, via) = memo.getOrPut(p.info) {
+                var best = if (qt.isEmpty()) 0f else Text.score(qt, p.tokens)
+                var v: String? = null
+                for ((t, toks) in alt) {
+                    val sc = Text.score(toks, p.tokens)
+                    if (sc > best + 0.05f) { best = sc; v = t }
+                }
+                best to v
             }
-            if (best < 0.68f) continue
-            if (p.isMovie) best += 0.08f
+            if (base < 0.68f) continue
+            val score = if (p.isMovie) base + 0.08f else base
             val key = p.ch + p.start
             val prev = hits[key]
-            if (prev == null || prev.score < best) hits[key] = EpgHit(p, best, via)
+            if (prev == null || prev.score < score) hits[key] = EpgHit(p, score, via)
         }
         return hits.values.sortedWith(
             compareByDescending<EpgHit> { (it.score * 4).toInt() }
@@ -148,7 +167,7 @@ class Epg(private val ctx: Context) {
         } finally { refreshing = false }
     }
 
-    private fun download(url: String, wanted: Set<String>): List<Prog> {
+    private fun download(url: String, wanted: Set<String>): List<Raw> {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 15000; c.readTimeout = 30000
         c.setRequestProperty("User-Agent", "AuraLauncher/1.0 (Android TV)")
@@ -158,7 +177,7 @@ class Epg(private val ctx: Context) {
         val b0 = raw.read(); val b1 = raw.read(); raw.reset()
         val input = if (b0 == 0x1f && b1 == 0x8b) GZIPInputStream(raw, 64 * 1024) else raw
         val fmt = SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US)
-        val out = ArrayList<Prog>(20000)
+        val out = ArrayList<Raw>(20000)
         input.use { ins ->
             val xp = Xml.newPullParser()
             xp.setInput(ins, "UTF-8")
@@ -187,7 +206,7 @@ class Epg(private val ctx: Context) {
                     XmlPullParser.END_TAG -> {
                         if (xp.name == "title" || xp.name == "desc") field = null
                         if (xp.name == "programme" && ch != null && start > 0 && stop > start && title.isNotBlank()) {
-                            out += Prog(start, stop, ch, clean(title), clean(desc).take(220))
+                            out += Raw(start, stop, ch!!, clean(title), clean(desc).take(220))
                             ch = null
                         }
                     }
@@ -202,21 +221,24 @@ class Epg(private val ctx: Context) {
 
     private fun parseTime(f: SimpleDateFormat, s: String?): Long = try { f.parse(s!!)!!.time } catch (_: Throwable) { 0L }
 
-    private fun store(progs: List<Prog>) {
+    /** A downloaded airing before it is written to disk (keeps the description for the file). */
+    class Raw(val start: Long, val stop: Long, val ch: String, val title: String, val desc: String)
+
+    private fun store(progs: List<Raw>) {
         val tz = TimeZone.getDefault()
         val df = dayFmt.apply { timeZone = tz }
         val byDay = progs.groupBy { df.format(it.start) }
         for ((day, list) in byDay) {
             val f = File(dir, "$day.tsv")
-            val merged = LinkedHashMap<String, Prog>()
-            if (f.exists()) f.forEachLine { parseLine(it)?.let { p -> merged[p.ch + p.start] = p } }
-            list.forEach { merged[it.ch + it.start] = it }
-            val tmp = File(dir, "$day.tmp")
-            tmp.bufferedWriter().use { w ->
-                merged.values.sortedBy { it.start }.forEach {
-                    w.write("${it.start / 1000}\t${it.stop / 1000}\t${it.ch}\t${it.title}\t${it.desc}\n")
-                }
+            // key = channel + start; existing lines are merged as raw text
+            val merged = LinkedHashMap<String, Pair<Long, String>>()
+            if (f.exists()) f.forEachLine { line ->
+                val a = line.indexOf('\t'); val b = line.indexOf('\t', a + 1); val c = line.indexOf('\t', b + 1)
+                if (a > 0 && b > a && c > b) line.substring(0, a).toLongOrNull()?.let { st -> merged[line.substring(b + 1, c) + st] = st to line }
             }
+            list.forEach { merged[it.ch + (it.start / 1000)] = (it.start / 1000) to "${it.start / 1000}\t${it.stop / 1000}\t${it.ch}\t${it.title}\t${it.desc}" }
+            val tmp = File(dir, "$day.tmp")
+            tmp.bufferedWriter().use { w -> merged.values.sortedBy { it.first }.forEach { w.write(it.second); w.write("\n") } }
             tmp.renameTo(f)
         }
         val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -8) }

@@ -8,6 +8,10 @@ A11Y="$PKG/$PKG.system.AuraService"
 echo "• Permissions (Wi-Fi scanning / Bluetooth discovery need location; visualiser needs audio)"
 for p in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION RECORD_AUDIO; do adb shell pm grant $PKG android.permission.$p || true; done
 
+echo "• Allow over-Wi-Fi self updates + compile Aura to native code"
+adb shell appops set $PKG REQUEST_INSTALL_PACKAGES allow || true
+adb shell cmd package compile -m speed -f $PKG >/dev/null || true
+
 echo "• Notification access (pop-ups, now-playing pill)"
 adb shell cmd notification allow_listener $PKG/$PKG.system.NotificationService
 
