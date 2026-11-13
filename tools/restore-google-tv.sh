@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Undo everything: Google TV's launcher back as home, VeloHome's helpers off.
+# Undo everything: Google TV's launcher back as home, VeloCinema's helpers off.
 PKG=com.nodevortex.aura
 adb shell am start -n $PKG/.HomeActivity --es aura.open real-home-off >/dev/null 2>&1
 adb shell pm enable com.google.android.tungsten.setupwraith

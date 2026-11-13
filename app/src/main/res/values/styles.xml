@@ -18,5 +18,5 @@
         <item name="android:activityOpenEnterAnimation">@android:anim/fade_in</item>
         <item name="android:activityCloseExitAnimation">@android:anim/fade_out</item>
     </style>
-    <string name="a11y_desc">VeloHome: custom volume slider with output switching, notification pop-ups, earbuds battery card, sleep timer countdown, music visualiser and profile lock.</string>
+    <string name="a11y_desc">VeloCinema: custom volume slider with output switching, notification pop-ups, earbuds battery card, sleep timer countdown, music visualiser and profile lock.</string>
 </resources>

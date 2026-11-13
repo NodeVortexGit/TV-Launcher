@@ -215,8 +215,8 @@ class QuickSettingsPanel(host: PanelHost, act: HomeActivity, private val startPa
         addView(notifBox, lp(MATCH, WRAP))
         renderNotifications()
 
-        section("VeloHome")
-        row(ListRow(ctx, "Настройки на VeloHome", "Мрежа, звук, профили и заключване, поверителност", R.drawable.ic_tune).apply {
+        section("VeloCinema")
+        row(ListRow(ctx, "Настройки на VeloCinema", "Мрежа, звук, профили и заключване, поверителност", R.drawable.ic_tune).apply {
             setOnClickListener { dismiss(); act.panels.open(SettingsPanel(act.panels, act)) }
         })
         com.nodevortex.aura.system.ShareServer.address(ctx)?.let { url ->
@@ -554,7 +554,7 @@ class QuickSettingsPanel(host: PanelHost, act: HomeActivity, private val startPa
             })
         }
         row(ListRow(ctx, "Изключи сега", null, R.drawable.ic_moon).apply { setOnClickListener { dismiss(); SleepTimer.sleepNow(ctx) } })
-        if (!SleepTimer.adminActive(ctx)) addView(ctx.label(13f, 450, C.textFaint, 3, "Съвет: пуснете веднъж tools/setup.sh, за да може VeloHome сама да изключва телевизора."), lp(WRAP, WRAP).margins(l = 18.dp, t = 12.dp))
+        if (!SleepTimer.adminActive(ctx)) addView(ctx.label(13f, 450, C.textFaint, 3, "Съвет: пуснете веднъж tools/setup.sh, за да може VeloCinema сама да изключва телевизора."), lp(WRAP, WRAP).margins(l = 18.dp, t = 12.dp))
     }
 
     // =================================================================================== output

@@ -14,7 +14,7 @@ import java.net.URLEncoder
 object TitleTranslator {
     private val cache = LruCache<String, List<String>>(64)
     private val latin = Regex("[a-zA-Z]{3,}")
-    private const val UA = "VeloHome/1.2 (Android TV launcher)"
+    private const val UA = "VeloCinema/1.2 (Android TV launcher)"
 
     fun lookup(query: String): List<String> {
         val q = query.trim()

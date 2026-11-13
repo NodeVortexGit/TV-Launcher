@@ -237,7 +237,7 @@ object ShareServer {
     }
 
     private const val PAGE = """<!doctype html><html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>VeloHome · Към телевизора</title><style>
+<title>VeloCinema · Към телевизора</title><style>
 :root{--bg:#0b0d12;--card:#171a21;--line:#262a33;--text:#f2f4f8;--dim:#9aa3b2;--acc:#8ab4f8}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px;max-width:720px;margin:auto}
 h1{font-size:22px;font-weight:600;margin:8px 0 16px}h2{font-size:14px;color:var(--dim);font-weight:600;margin:22px 0 10px;text-transform:uppercase;letter-spacing:.06em}
@@ -258,7 +258,7 @@ button.ghost{background:#232733;color:var(--text)}.row{display:flex;gap:10px;ali
 let C=[];const post=(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(b||{})}).then(r=>r.json());
 function msg(t){document.getElementById('msg').textContent=t}
 function openUrl(){post('/api/open',{url:document.getElementById('url').value}).then(r=>msg(r.ok?'Отваря се на телевизора…':'Тази връзка не може да се отвори'))}
-function m(c){post('/api/media/'+c).then(np)}function k(c){post('/api/key',{k:c}).then(r=>{if(!r.ok)msg('Дистанционното изисква разширените функции на VeloHome')})}
+function m(c){post('/api/media/'+c).then(np)}function k(c){post('/api/key',{k:c}).then(r=>{if(!r.ok)msg('Дистанционното изисква разширените функции на VeloCinema')})}
 function tune(n){post('/api/tune',{n}).then(()=>msg('Пускам канал '+n+'…'))}
 function draw(){const q=document.getElementById('f').value.toLowerCase();document.getElementById('ch').innerHTML=C.filter(c=>!q||(c.n+' '+c.name+' '+c.now).toLowerCase().includes(q)).map(c=>'<div class="c" onclick="tune('+c.n+')"><b>'+c.n+'</b>'+c.name+'<small>'+(c.now||'')+'</small></div>').join('')}
 function np(){fetch('/api/now').then(r=>r.json()).then(j=>{document.getElementById('np').textContent=j.title?(j.title+' · '+j.artist):'Нищо не върви'})}

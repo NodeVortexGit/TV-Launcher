@@ -434,7 +434,7 @@ class HomeActivity : Activity() {
     private fun shellAction(e: AppEntry, cmd: String, done: String) {
         val b = app.bridge
         if (!b.ready) {
-            toast(this, "Нужни са разширените функции (Настройки на VeloHome → Разширени функции)")
+            toast(this, "Нужни са разширените функции (Настройки на VeloCinema → Разширени функции)")
             startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${e.pkg}")))
             return
         }
@@ -443,7 +443,7 @@ class HomeActivity : Activity() {
 
     private fun toggleKeep(e: AppEntry, on: Boolean) {
         val b = app.bridge
-        if (!b.ready) { toast(this, "Нужни са разширените функции (Настройки на VeloHome → Разширени функции)"); return }
+        if (!b.ready) { toast(this, "Нужни са разширените функции (Настройки на VeloCinema → Разширени функции)"); return }
         val cmd = if (on) "cmd deviceidle whitelist +${e.pkg}; cmd appops set ${e.pkg} RUN_ANY_IN_BACKGROUND allow; am set-standby-bucket ${e.pkg} active"
         else "cmd deviceidle whitelist -${e.pkg}; am set-standby-bucket ${e.pkg} working_set"
         b.shell(cmd) { out ->

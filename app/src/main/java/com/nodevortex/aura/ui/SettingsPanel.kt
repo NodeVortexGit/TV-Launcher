@@ -61,7 +61,7 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
         }
 
     private fun main() = page {
-        header("Настройки на VeloHome", back = false)
+        header("Настройки на VeloCinema", back = false)
 
         section("Начален екран")
         row(cycle("Приложения на ред", R.drawable.ic_apps, listOf(5, 6, 7), { prefs.getInt("columns", 6) }, { "$it" }) {
@@ -72,13 +72,13 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
         row(ListRow(ctx, "Скрити приложения", if (hidden.isEmpty()) "Няма" else "${hidden.size} скрити — отворете, за да ги върнете", R.drawable.ic_hide).apply {
             setOnClickListener { if (hidden.isNotEmpty()) push(hiddenPage()) }
         })
-        row(toggle("Бутонът „Начало“ води към VeloHome", "Задържане на „Начало“ отваря бързите настройки", "homeOverride", true, R.drawable.ic_home))
+        row(toggle("Бутонът „Начало“ води към VeloCinema", "Задържане на „Начало“ отваря бързите настройки", "homeOverride", true, R.drawable.ic_home))
         val stock = com.nodevortex.aura.system.StockLauncher
-        row(ListRow(ctx, "VeloHome е началният екран по подразбиране",
+        row(ListRow(ctx, "VeloCinema е началният екран по подразбиране",
             if (stock.auraIsDefault(ctx)) "Да — и след рестарт. Google TV се включва само за смяна на профил" else "Не — пуснете tools/make-default.sh от компютъра", R.drawable.ic_check))
 
         section("Звук, известия и скрийнсейвър")
-        row(toggle("Плъзгач за звука на VeloHome", "Натиснете OK, докато се вижда, за да смените слушалки/тонколони", "customVolume", true, R.drawable.ic_volume))
+        row(toggle("Плъзгач за звука на VeloCinema", "Натиснете OK, докато се вижда, за да смените слушалки/тонколони", "customVolume", true, R.drawable.ic_volume))
         row(toggle("Известия върху всяко приложение", null, "popups", true, R.drawable.ic_bell))
         row(toggle("Батерия на слушалките при свързване", "Galaxy Buds показват ляво / дясно / кутия", "budsPopup", true, R.drawable.ic_headphones))
         row(toggle("Музикален скрийнсейвър", "Пулсира в ритъма, когато върви музика и дистанционното не се ползва", "musicSaver", true, R.drawable.ic_music))
@@ -103,7 +103,7 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
                 Lock.owner = next; trailingText(next); act.refreshAvatar()
             }
         })
-        row(ListRow(ctx, "Зареждане на профилите от Google TV", if (names.isEmpty()) "VeloHome ще отвори менюто на Google TV за момент" else names.joinToString(" · "), R.drawable.ic_refresh).apply {
+        row(ListRow(ctx, "Зареждане на профилите от Google TV", if (names.isEmpty()) "VeloCinema ще отвори менюто на Google TV за момент" else names.joinToString(" · "), R.drawable.ic_refresh).apply {
             setOnClickListener { dismiss(); Lock.switchTo(act, null) }
         })
 
@@ -122,9 +122,9 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
             }
         })
         addView(ctx.label(13f, 420, C.textFaint, 4,
-            "VeloHome помни какво слушате, гледате и търсите само на този телевизор (за по-умно търсене). Нищо не се изпраща навън."),
+            "VeloCinema помни какво слушате, гледате и търсите само на този телевизор (за по-умно търсене). Нищо не се изпраща навън."),
             lp(MATCH, WRAP).margins(l = 18.dp, r = 18.dp, t = 4.dp))
-        row(ListRow(ctx, "Изтриване на историята на VeloHome", null, R.drawable.ic_delete).apply {
+        row(ListRow(ctx, "Изтриване на историята на VeloCinema", null, R.drawable.ic_delete).apply {
             setOnClickListener {
                 java.io.File(Aura.app.filesDir, "signals").deleteRecursively()
                 prefs.edit().remove("recentSearches").apply()
@@ -137,8 +137,8 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
         row(bridgeRow!!)
         renderBridge()
         addView(ctx.label(13f, 420, C.textFaint, 6,
-            "Позволява на VeloHome да сменя каналите в COTV, да чисти кеша на приложения, да ги спира и да използва телефона като дистанционно. " +
-                "След всеки рестарт на Chromecast трябва да се пусне tools/setup.sh от компютъра. Първия път разрешете „velohome@launcher“ на телевизора."),
+            "Позволява на VeloCinema да сменя каналите в COTV, да чисти кеша на приложения, да ги спира и да използва телефона като дистанционно. " +
+                "След всеки рестарт на Chromecast трябва да се пусне tools/setup.sh от компютъра. Първия път разрешете „velocinema@launcher“ на телевизора."),
             lp(MATCH, WRAP).margins(l = 18.dp, r = 18.dp, t = 4.dp))
 
         section("Изпращане към телевизора")
@@ -153,7 +153,7 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
         })
 
         section("Информация")
-        row(ListRow(ctx, "VeloHome 1.1", "Началният екран на този телевизор", R.drawable.ic_info))
+        row(ListRow(ctx, "VeloCinema 1.2", "Началният екран на този телевизор", R.drawable.ic_info))
     }
 
     private fun lockSub() = if (Lock.enabled) "Включено — само профилът „${Lock.displayName(Lock.owner)}“ иска ПИН" else "Изключено"
@@ -188,7 +188,7 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
         r.setSubtitle(when (s) {
             AdbBridge.State.READY -> "Свързано — смяната на канали и инструментите работят"
             AdbBridge.State.CONNECTING -> "Свързване…"
-            AdbBridge.State.WAITING_APPROVAL -> "Разрешете „velohome@launcher“ в прозореца на телевизора"
+            AdbBridge.State.WAITING_APPROVAL -> "Разрешете „velocinema@launcher“ в прозореца на телевизора"
             AdbBridge.State.OFFLINE, AdbBridge.State.UNKNOWN -> "Не е свързано — натиснете OK"
         })
         if (s == AdbBridge.State.READY) r.trailingIcon(R.drawable.ic_check) else r.trailingText("")
@@ -290,7 +290,7 @@ class ProfilesPanel(host: PanelHost, private val act: HomeActivity) : Panel(host
             }
             row.addView(v, lp(WRAP, WRAP).margins(l = 22.dp, r = 22.dp))
         }
-        if (Lock.profiles.size < 2) actions.addView(ListRow(ctx, "Зареждане на профилите", "VeloHome ще ги прочете от Google TV (няколко секунди)", R.drawable.ic_refresh).apply {
+        if (Lock.profiles.size < 2) actions.addView(ListRow(ctx, "Зареждане на профилите", "VeloCinema ще ги прочете от Google TV (няколко секунди)", R.drawable.ic_refresh).apply {
             setOnClickListener { dismiss(); Lock.switchTo(act, null) }
         })
         actions.addView(ListRow(ctx, "Управление на акаунтите", "Добавяне или премахване на акаунти в Google", R.drawable.ic_settings).apply {

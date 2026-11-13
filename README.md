@@ -1,4 +1,6 @@
-# VeloHome — a responsive home-theatre launcher for Chromecast with Google TV (HD)
+<p align="center"><img src="docs/logo.png" width="160" alt="VeloCinema logo"></p>
+
+# VeloCinema — a responsive home-theatre launcher for Chromecast with Google TV (HD)
 
 Part of the Velo family (see VeloGuardOS): built to stay fast and responsive on low-end hardware.
 
@@ -31,10 +33,10 @@ tools/privacy.sh          # optional: switch off Google feedback/error reporting
 tools/restore-google-tv.sh  # undo everything
 ```
 
-## Why VeloHome can be the *real* default on Google TV
+## Why VeloCinema can be the *real* default on Google TV
 Android picks the highest-priority Home activity before it looks at the user's default, and only
 privileged apps may use a priority above 0. Google TV's launcher uses 2 and its setup app 1, so
-`tools/make-default.sh` disables both (reversible). VeloHome re-enables Google's launcher for a few
+`tools/make-default.sh` disables both (reversible). VeloCinema re-enables Google's launcher for a few
 seconds when you switch Google TV profiles.
 
 ## Personal files

@@ -125,8 +125,8 @@ class AuraService : AccessibilityService() {
             status.show("Подготвям смяната на профила…")
             StockLauncher.enable(this) { ok ->
                 if (ok) { redisableAfter = true; startSwitch(target, learnOnly) }
-                else { status.hide(); toasts.show(NotificationHub.Item("aura", packageName, "VeloHome", "Профилът не може да се смени",
-                    "Включете разширените функции (Настройки на VeloHome) или натиснете „Активиране“ в настройките на Google TV", null, 0, null, false)) }
+                else { status.hide(); toasts.show(NotificationHub.Item("aura", packageName, "VeloCinema", "Профилът не може да се смени",
+                    "Включете разширените функции (Настройки на VeloCinema) или натиснете „Активиране“ в настройките на Google TV", null, 0, null, false)) }
             }
             return
         }
@@ -194,7 +194,7 @@ class AuraService : AccessibilityService() {
         status.hide()
         if (redisableAfter) { redisableAfter = false; StockLauncher.disable(this) }
         if (ok || !leaveOpen) { allowStockUntil = 0L; goHome() }
-        else { allowStockHome(60_000); toasts.show(NotificationHub.Item("aura", packageName, "VeloHome", "Изберете профила", "Изберете ${s?.target ?: "профил"} от менюто на Google TV", null, 0, null, false)) }
+        else { allowStockHome(60_000); toasts.show(NotificationHub.Item("aura", packageName, "VeloCinema", "Изберете профила", "Изберете ${s?.target ?: "профил"} от менюто на Google TV", null, 0, null, false)) }
     }
 
     /** Clicks a button with one of [texts] in the active window (used for "Активиране" in TV Settings). */
