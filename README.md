@@ -1,4 +1,6 @@
-# Aura — a Google-TV-style launcher for Chromecast with Google TV (HD)
+# VeloHome — a responsive home-theatre launcher for Chromecast with Google TV (HD)
+
+Part of the Velo family (see VeloGuardOS): built to stay fast and responsive on low-end hardware.
 
 A custom home screen for Android TV / Google TV 14, written in plain Kotlin + Android Views
 (no AndroidX) so it stays fast on a 1.4 GB Chromecast HD. UI language: Bulgarian.
@@ -29,10 +31,10 @@ tools/privacy.sh          # optional: switch off Google feedback/error reporting
 tools/restore-google-tv.sh  # undo everything
 ```
 
-## Why Aura can be the *real* default on Google TV
+## Why VeloHome can be the *real* default on Google TV
 Android picks the highest-priority Home activity before it looks at the user's default, and only
 privileged apps may use a priority above 0. Google TV's launcher uses 2 and its setup app 1, so
-`tools/make-default.sh` disables both (reversible). Aura re-enables Google's launcher for a few
+`tools/make-default.sh` disables both (reversible). VeloHome re-enables Google's launcher for a few
 seconds when you switch Google TV profiles.
 
 ## Personal files

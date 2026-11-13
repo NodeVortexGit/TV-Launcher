@@ -220,7 +220,7 @@ class SearchPanel(host: PanelHost, private val act: HomeActivity, initial: Strin
         if (q.isEmpty()) {
             buildRecents()
             listOf(top, apps, channels, onTv, searchIn, settings).forEach { it.clear(); it.visibility = View.GONE }
-            status.text = "Подсказка: напишете филм на английски или български — Aura проверява програмата на COTV за последните 7 дни"
+            status.text = "Подсказка: напишете филм на английски или български — VeloHome проверява програмата на COTV за последните 7 дни"
             return
         }
         val qt = Text.tokens(q).map(Text::squash)
@@ -517,7 +517,7 @@ class SearchPanel(host: PanelHost, private val act: HomeActivity, initial: Strin
         S("Дата и час", "date time clock час дата", R.drawable.ic_history) { it.startActivity(Intent(Settings.ACTION_DATE_SETTINGS)) },
         S("Клавиатура", "keyboard input ime gboard клавиатура", R.drawable.ic_keyboard) { it.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)) },
         S("Информация за устройството", "about device info version update system информация версия", R.drawable.ic_info) { it.startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS)) },
-        S("Настройки на Aura", "aura launcher settings columns lock pin volume настройки заключване", R.drawable.ic_settings) { it.panels.open(SettingsPanel(it.panels, it)) },
+        S("Настройки на VeloHome", "velohome launcher settings columns lock pin volume настройки заключване", R.drawable.ic_settings) { it.panels.open(SettingsPanel(it.panels, it)) },
         S("Всички настройки", "settings настройки", R.drawable.ic_settings) { it.startActivity(Intent(Settings.ACTION_SETTINGS)) },
     )
 

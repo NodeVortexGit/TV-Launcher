@@ -29,7 +29,7 @@
         android:banner="@drawable/banner"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="Aura"
+        android:label="VeloHome"
         android:theme="@style/Aura">
 
         <activity
@@ -74,7 +74,7 @@
         <service
             android:name=".system.AuraService"
             android:exported="true"
-            android:label="Aura helper"
+            android:label="VeloHome helper"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
@@ -85,7 +85,7 @@
         <service
             android:name=".system.NotificationService"
             android:exported="true"
-            android:label="Aura notifications"
+            android:label="VeloHome notifications"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
@@ -100,7 +100,7 @@
         <receiver
             android:name=".system.SleepAdmin"
             android:exported="true"
-            android:label="Aura sleep timer"
+            android:label="VeloHome sleep timer"
             android:permission="android.permission.BIND_DEVICE_ADMIN">
             <meta-data android:name="android.app.device_admin" android:resource="@xml/device_admin" />
             <intent-filter>

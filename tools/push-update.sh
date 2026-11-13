@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install a new Aura build over Wi-Fi (no USB): Aura receives the APK and Android asks "Update?" on the TV.
+# Install a new VeloHome build over Wi-Fi (no USB): VeloHome receives the APK and Android asks "Update?" on the TV.
 # Usage: tools/push-update.sh [tv-ip]   (finds the TV on the local network if no IP is given)
 set -euo pipefail
 cd "$(dirname "$0")/.."

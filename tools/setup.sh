@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Aura launcher – one-time device setup (safe to re-run; re-run after every Chromecast reboot
+# VeloHome launcher – one-time device setup (safe to re-run; re-run after every Chromecast reboot
 # to bring back the "power features" bridge).
 set -euo pipefail
 PKG=com.nodevortex.aura
@@ -8,7 +8,7 @@ A11Y="$PKG/$PKG.system.AuraService"
 echo "• Permissions (Wi-Fi scanning / Bluetooth discovery need location; visualiser needs audio)"
 for p in ACCESS_FINE_LOCATION ACCESS_COARSE_LOCATION RECORD_AUDIO; do adb shell pm grant $PKG android.permission.$p || true; done
 
-echo "• Allow over-Wi-Fi self updates + compile Aura to native code"
+echo "• Allow over-Wi-Fi self updates + compile VeloHome to native code"
 adb shell appops set $PKG REQUEST_INSTALL_PACKAGES allow || true
 adb shell cmd package compile -m speed -f $PKG >/dev/null || true
 
@@ -23,13 +23,13 @@ if [[ "$cur" != *"$A11Y"* ]]; then
 fi
 adb shell settings put secure accessibility_enabled 1
 
-echo "• Sleep-timer permission (device admin: lets Aura put the TV to sleep)"
+echo "• Sleep-timer permission (device admin: lets VeloHome put the TV to sleep)"
 adb shell dpm set-active-admin $PKG/.system.SleepAdmin 2>/dev/null || true
 
-echo "• Make Aura the real default home screen (survives reboots)"
+echo "• Make VeloHome the real default home screen (survives reboots)"
 bash "$(dirname "$0")/make-default.sh"
 
 echo "• Power-features bridge (adb over 127.0.0.1:5555 – resets when the Chromecast reboots)"
 adb tcpip 5555 >/dev/null && sleep 3
 adb wait-for-usb-device 2>/dev/null || true
-echo "Done. On the TV: Aura settings → Power features → OK, then allow \"aura@launcher\" (tick Always allow)."
+echo "Done. On the TV: Настройки на VeloHome → Разширени функции → OK, then allow \"velohome@launcher\" (tick Always allow)."

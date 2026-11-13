@@ -156,7 +156,7 @@ class AdbBridge(private val ctx: Context) {
         for (i in 0 until words) b.putInt(n.shiftRight(32 * i).mod(r32).toInt())
         for (i in 0 until words) b.putInt(rr.shiftRight(32 * i).mod(r32).toInt())
         b.putInt(pub.publicExponent.toInt())
-        return (Base64.encodeToString(b.array(), Base64.NO_WRAP) + " aura@launcher\u0000").toByteArray()
+        return (Base64.encodeToString(b.array(), Base64.NO_WRAP) + " velohome@launcher\u0000").toByteArray()
     }
 
     private fun loadOrCreateKeys(): KeyPair {

@@ -170,7 +170,7 @@ class Epg(private val ctx: Context) {
     private fun download(url: String, wanted: Set<String>): List<Raw> {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 15000; c.readTimeout = 30000
-        c.setRequestProperty("User-Agent", "AuraLauncher/1.0 (Android TV)")
+        c.setRequestProperty("User-Agent", "VeloHome/1.2 (Android TV)")
         c.setRequestProperty("Accept-Encoding", "identity")
         val raw = BufferedInputStream(c.inputStream, 64 * 1024)
         raw.mark(4)
