@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/logo.png" width="160" alt="VeloCinema logo"></p>
+<p align="center"><img src="docs/logo.png" width="300" alt="VeloCinema logo"></p>
 
 # VeloCinema — a responsive home-theatre launcher for Chromecast with Google TV (HD)
 
