@@ -23,7 +23,7 @@ object MediaWatcher {
     class Now(
         val pkg: String, val title: String, val artist: String, val art: Bitmap?,
         val playing: Boolean, val duration: Long, val position: Long, val positionAt: Long,
-        val controller: MediaController,
+        val controller: MediaController, val uri: String? = null,
     ) {
         fun positionNow(): Long =
             if (!playing) position else position + (SystemClock.elapsedRealtime() - positionAt)
@@ -84,11 +84,12 @@ object MediaWatcher {
                 st?.state == PlaybackState.STATE_PLAYING,
                 md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L,
                 st?.position ?: 0L, st?.lastPositionUpdateTime ?: SystemClock.elapsedRealtime(), mc,
+                md?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)?.takeIf { SpotifyLink.isTrack(it) },
             )
         }
         if (n?.playing == true) {
             lastPlayingAt = System.currentTimeMillis()
-            com.nodevortex.aura.data.Signals.notePlay(n.title, n.artist, n.pkg, n.art)
+            com.nodevortex.aura.data.Signals.notePlay(n.title, n.artist, n.pkg, n.art, n.uri)
         }
         now = n
         listeners.forEach { it(n) }
@@ -102,10 +103,6 @@ object MediaWatcher {
     fun playPause() { now?.let { if (it.playing) it.controller.transportControls.pause() else it.controller.transportControls.play() } }
     fun next() { now?.controller?.transportControls?.skipToNext() }
 
-    /** A media session for [pkg] that can play from a search query, if one is alive. */
-    fun searchableSession(pkg: String): MediaController? = tracked.keys.firstOrNull {
-        it.packageName == pkg && (it.playbackState?.actions ?: 0L) and PlaybackState.ACTION_PLAY_FROM_SEARCH != 0L
-    }
     fun previous() { now?.controller?.transportControls?.skipToPrevious() }
 
     const val SPOTIFY = "com.spotify.tv.android"

@@ -15,7 +15,7 @@ import java.util.Calendar
  * when apps are used, so search can guess what you most likely mean.
  */
 object Signals {
-    class Play(val title: String, val artist: String, val pkg: String, var count: Int, var last: Long, val artKey: String?) {
+    class Play(val title: String, val artist: String, val pkg: String, var count: Int, var last: Long, val artKey: String?, var uri: String? = null) {
         val tokens: List<String> by lazy { Text.tokens("$title $artist").map(Text::squash) }
         val titleTokens: List<String> by lazy { Text.tokens(title).map(Text::squash) }
     }
@@ -35,7 +35,7 @@ object Signals {
         try {
             val a = JSONArray(File(dir, "plays.json").readText())
             for (i in 0 until a.length()) a.getJSONObject(i).let {
-                plays += Play(it.getString("t"), it.optString("a"), it.getString("p"), it.optInt("c", 1), it.optLong("l"), it.optString("k").ifEmpty { null })
+                plays += Play(it.getString("t"), it.optString("a"), it.getString("p"), it.optInt("c", 1), it.optLong("l"), it.optString("k").ifEmpty { null }, it.optString("u").ifEmpty { null })
             }
         } catch (_: Throwable) { }
         try {
@@ -47,7 +47,7 @@ object Signals {
     @Synchronized private fun save() {
         val pa = JSONArray()
         plays.sortedByDescending { it.last }.take(400).forEach {
-            pa.put(JSONObject().put("t", it.title).put("a", it.artist).put("p", it.pkg).put("c", it.count).put("l", it.last).put("k", it.artKey ?: ""))
+            pa.put(JSONObject().put("t", it.title).put("a", it.artist).put("p", it.pkg).put("c", it.count).put("l", it.last).put("k", it.artKey ?: "").put("u", it.uri ?: ""))
         }
         val ca = JSONArray()
         choices.takeLast(300).forEach { ca.put(JSONObject().put("q", it.query).put("k", it.kind).put("t", it.target).put("w", it.time)) }
@@ -57,19 +57,19 @@ object Signals {
     }
 
     /** Called for every track/video that starts playing. */
-    @Synchronized fun notePlay(title: String, artist: String, pkg: String, art: Bitmap?) {
+    @Synchronized fun notePlay(title: String, artist: String, pkg: String, art: Bitmap?, uri: String? = null) {
         load()
         val key = "$pkg|$title|$artist"
         if (key == lastKey) return
         lastKey = key
         val existing = plays.firstOrNull { it.pkg == pkg && it.title == title && it.artist == artist }
-        if (existing != null) { existing.count++; existing.last = System.currentTimeMillis() }
+        if (existing != null) { existing.count++; existing.last = System.currentTimeMillis(); if (uri != null) existing.uri = uri }
         else {
             val artKey = art?.let { "a" + (key.hashCode().toLong() and 0xffffffffL).toString(36) }
             if (art != null && artKey != null) Aura.io.execute {
                 try { File(dir, "$artKey.jpg").outputStream().use { Bitmap.createScaledBitmap(art, 160, 160, true).compress(Bitmap.CompressFormat.JPEG, 85, it) } } catch (_: Throwable) { }
             }
-            plays += Play(title, artist, pkg, 1, System.currentTimeMillis(), artKey)
+            plays += Play(title, artist, pkg, 1, System.currentTimeMillis(), artKey, uri)
         }
         save()
     }

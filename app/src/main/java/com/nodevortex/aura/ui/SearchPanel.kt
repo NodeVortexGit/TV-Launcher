@@ -29,6 +29,7 @@ import com.nodevortex.aura.R
 import com.nodevortex.aura.data.AppEntry
 import com.nodevortex.aura.data.Signals
 import com.nodevortex.aura.system.MediaWatcher
+import com.nodevortex.aura.system.SpotifyLink
 import com.nodevortex.aura.tv.Channel
 import com.nodevortex.aura.tv.EpgHit
 import com.nodevortex.aura.tv.TitleTranslator
@@ -313,7 +314,7 @@ class SearchPanel(host: PanelHost, private val act: HomeActivity, initial: Strin
                 hero.accent = 0xFF1DB954.toInt()
                 setHeroArt(hero, play, MediaWatcher.SPOTIFY)
                 val searchFor = if (play != null) "${play.title} ${play.artist}" else q
-                hero.setOnClickListener { chose("spotify", searchFor); playSpotify(searchFor) }
+                hero.setOnClickListener { chose("spotify", searchFor); playSpotify(searchFor, play) }
                 hero.setOnLongClickListener { openSpotifySearch(searchFor); true }
             }
         }
@@ -327,14 +328,14 @@ class SearchPanel(host: PanelHost, private val act: HomeActivity, initial: Strin
         repo.byPackage(pkg)?.let { e -> repo.icon(e, 124.dp) { b -> if (hero.art.drawable == null) hero.art.setImageBitmap(b) } }
     }
 
-    private fun playSpotify(q: String) {
+    /** Remembered song: straight from its Spotify id. Anything else: Google's assistant plays it on Spotify. */
+    private fun playSpotify(q: String, play: Signals.Play? = null) {
         hideIme()
-        val s = MediaWatcher.searchableSession(MediaWatcher.SPOTIFY)
-        if (s != null) {
-            s.transportControls.playFromSearch(q, Bundle())
-            toast(ctx, "Пускам „$q“ в Spotify")
-            dismiss()
-        } else openSpotifySearch(q)
+        val uri = play?.uri
+        val ok = if (SpotifyLink.isTrack(uri)) SpotifyLink.playTrack(act, uri!!) else SpotifyLink.playQuery(act, q)
+        if (!ok) { openSpotifySearch(q); return }
+        toast(ctx, "Пускам „${play?.title ?: q}“ в Spotify")
+        dismiss()
     }
 
     private fun openSpotifySearch(q: String) {
@@ -405,7 +406,7 @@ class SearchPanel(host: PanelHost, private val act: HomeActivity, initial: Strin
         Signals.recentPlays(4, MediaWatcher.SPOTIFY).forEach { p ->
             val chip = AppChip(ctx, "${p.title} · ${p.artist}", null, R.drawable.ic_music)
             Aura.io.execute { Signals.art(p)?.let { b -> Aura.ui { chip.setIcon(b) } } }
-            chip.setOnClickListener { query = p.title; chose("spotify", "${p.title} ${p.artist}"); playSpotify("${p.title} ${p.artist}") }
+            chip.setOnClickListener { query = p.title; chose("spotify", "${p.title} ${p.artist}"); playSpotify("${p.title} ${p.artist}", p) }
             recents.add(chip, 12.dp)
         }
         val repo = Aura.app.apps
