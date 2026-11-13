@@ -218,13 +218,12 @@ class RowPinPad(ctx: Context, private val length: Int = 4, private val onComplet
             val pin = entered.toString()
             postDelayed({ onComplete(pin) }, 140)
         }
-        if (row != 0) postDelayed({ row = 0; render(); rowSpring.snapTo(-1f); rowSpring.animateTo(0f) }, 120)
+        // The row stays where it is: only ▲ / ▼ move it.
     }
 
     fun error() {
         entered.clear(); dots.count = 0
         shake.snapTo(0f); shake.nudge(-2600f)
-        row = 0; render()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
