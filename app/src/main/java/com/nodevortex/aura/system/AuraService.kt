@@ -69,7 +69,8 @@ class AuraService : AccessibilityService() {
         Aura.main.postDelayed({ if (activeIsStockHome()) goHome() }, 1500)
         Aura.main.postDelayed({ StockLauncher.enforce(this) }, 4000)
         // After a reboot the cast service still needs its credentials once (see CastCreds).
-        Aura.main.postDelayed({ CastCreds.check(force = true) }, 45_000)
+        Aura.main.postDelayed({ CastCreds.check(force = true) }, 60_000)
+        Aura.main.postDelayed({ CastCreds.check(force = true) }, 180_000)
     }
 
     override fun onDestroy() {
