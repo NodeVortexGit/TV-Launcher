@@ -376,6 +376,8 @@ class LockActivity : Activity() {
         Lock.markUnlocked()
         Lock.showing = false
         val change = !Lock.same(name, Lock.active)
+        // Switching profiles plays it when the switch completes (AuraService.finishSwitch).
+        if (!change) com.nodevortex.aura.system.NavSound.welcome()
         finish()
         overridePendingTransition(0, android.R.anim.fade_out)
         if (change) Lock.switchTo(this, name)

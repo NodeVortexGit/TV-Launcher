@@ -38,6 +38,11 @@ object SleepTimer {
     /** Put the TV to sleep using whatever power we have. */
     fun sleepNow(ctx: Context) {
         Aura.prefs.edit().remove(KEY).apply()
+        val wait = NavSound.shutdown()
+        if (wait > 0) Aura.main.postDelayed({ goDark(ctx) }, wait) else goDark(ctx)
+    }
+
+    private fun goDark(ctx: Context) {
         if (adminActive(ctx)) {
             try { ctx.getSystemService(DevicePolicyManager::class.java).lockNow(); return } catch (_: Throwable) { }
         }

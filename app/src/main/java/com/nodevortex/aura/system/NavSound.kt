@@ -29,6 +29,8 @@ object NavSound {
 
     private var pool: SoundPool? = null
     private var sMove = 0; private var sConfirm = 0; private var sBack = 0
+    private var sWelcome = 0; private var sShutdown = 0
+    private var lastWelcome = 0L
     @Volatile private var sysOn = true
     private var lastDpad = 0L
 
@@ -49,6 +51,8 @@ object NavSound {
             sMove = p.load(ctx, R.raw.sfx_move, 1)
             sConfirm = p.load(ctx, R.raw.sfx_confirm, 1)
             sBack = p.load(ctx, R.raw.sfx_back, 1)
+            sWelcome = p.load(ctx, R.raw.sfx_welcome, 1)
+            sShutdown = p.load(ctx, R.raw.sfx_shutdown, 1)
             pool = p
         }
     }
@@ -82,13 +86,24 @@ object NavSound {
     /** A move the caller sounds itself: ignore the focus hops it causes. */
     fun manualMove() { lastDpad = 0L }
 
-    fun move() = play(sMove)
-    fun confirm() = play(sConfirm)
-    fun back() = play(sBack)
+    fun move() { play(sMove) }
+    fun confirm() { play(sConfirm) }
+    fun back() { play(sBack) }
 
-    private fun play(id: Int) {
-        if (id == 0 || sysOn || Aura.prefs.getInt("navSound", VELO) != VELO) return
-        pool?.play(id, VOLUME, VOLUME, 1, 0, 1f)
+    /** A profile was entered (unlocked on the lock screen, or switched to). Once per entry. */
+    fun welcome() {
+        val now = SystemClock.uptimeMillis()
+        if (now - lastWelcome < 4000) return
+        if (play(sWelcome)) lastWelcome = now
+    }
+
+    /** Plays the shutdown sound; returns how long to wait before the screen goes dark (0 = not played). */
+    fun shutdown(): Long = if (play(sShutdown)) SHUTDOWN_MS else 0L
+    private const val SHUTDOWN_MS = 800L
+
+    private fun play(id: Int): Boolean {
+        if (id == 0 || sysOn || Aura.prefs.getInt("navSound", VELO) != VELO) return false
+        return (pool?.play(id, VOLUME, VOLUME, 1, 0, 1f) ?: 0) != 0
     }
 
     /**

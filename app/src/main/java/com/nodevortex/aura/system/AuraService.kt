@@ -61,6 +61,7 @@ class AuraService : AccessibilityService() {
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             addAction(BATTERY_CHANGED)
         })
+        registerReceiver(shutdownReceiver, IntentFilter(Intent.ACTION_SHUTDOWN))
         ShareServer.start(this)
         Aura.main.postDelayed(idleTick, 30_000)
         Aura.app.bridge.probe()
@@ -72,6 +73,7 @@ class AuraService : AccessibilityService() {
     override fun onDestroy() {
         instance = null
         try { unregisterReceiver(receiver) } catch (_: Throwable) { }
+        try { unregisterReceiver(shutdownReceiver) } catch (_: Throwable) { }
         Aura.main.removeCallbacks(idleTick)
         volume.detach(); toasts.detach(); buds.detach(); sleepWarn.detach(); status.detach(); cover.detach()
         NotificationHub.popup = null
@@ -257,6 +259,7 @@ class AuraService : AccessibilityService() {
         android.util.Log.i("VeloSwitch", "finish ok=$ok stage=${s?.stage} t=${s?.let { SystemClock.elapsedRealtime() - it.started }}ms")
         switching = null
         Aura.main.removeCallbacks(stepR)
+        if (ok && s?.learn == false) NavSound.welcome()
         if (redisableAfter) { redisableAfter = false; StockLauncher.disable(this) }
         allowStockUntil = 0L; goHome()
         // Lift the cover only once VeloCinema's home is back underneath it.
@@ -450,6 +453,16 @@ class AuraService : AccessibilityService() {
     }
 
     // ----------------------------------------------------------------------------- broadcasts
+
+    /** Restart / power off from the system menu: the screen is still on, so the sound is heard. */
+    private val shutdownReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context, i: Intent) {
+            val wait = NavSound.shutdown()
+            if (wait <= 0) return
+            val pending = goAsync() // Android waits for this before it shuts down
+            Aura.main.postDelayed({ pending.finish() }, wait)
+        }
+    }
 
     private val receiver = object : BroadcastReceiver() {
         @SuppressLint("MissingPermission")
