@@ -25,7 +25,7 @@ object NavSound {
     const val GOOGLE = 1
     const val OFF = 2
     /** Playback level of the sounds (1 = as recorded). */
-    private const val VOLUME = 0.9f
+    private const val VOLUME = 0.7f
 
     private var pool: SoundPool? = null
     private var sMove = 0; private var sConfirm = 0; private var sBack = 0
