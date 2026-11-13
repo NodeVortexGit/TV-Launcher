@@ -61,6 +61,7 @@ class SettingsPanel(host: PanelHost, act: HomeActivity) : SheetPanel(host, act, 
         }
 
     private fun main() = page {
+        addView(ImageView(ctx).apply { setImageResource(R.drawable.logo); adjustViewBounds = true }, lp(WRAP, 92.dp).margins(l = 6.dp, b = 6.dp))
         header("Настройки на VeloCinema", back = false)
 
         section("Начален екран")

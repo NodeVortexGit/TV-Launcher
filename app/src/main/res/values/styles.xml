@@ -2,7 +2,7 @@
 <resources>
     <color name="bg">#FF090B0F</color>
     <style name="Aura" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
-        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:windowBackground">@drawable/splash</item>
         <item name="android:colorBackground">@color/bg</item>
         <item name="android:colorAccent">#FF8AB4F8</item>
         <item name="android:windowShowWallpaper">false</item>

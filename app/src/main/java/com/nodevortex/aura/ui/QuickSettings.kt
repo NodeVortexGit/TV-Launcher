@@ -222,7 +222,19 @@ class QuickSettingsPanel(host: PanelHost, act: HomeActivity, private val startPa
         com.nodevortex.aura.system.ShareServer.address(ctx)?.let { url ->
             row(ListRow(ctx, "Изпращане от телефона", url, R.drawable.ic_cast).apply { setOnClickListener { toast(ctx, "Отворете $url в браузъра на телефона") } })
         }
+        addView(brandFooter(), lp(MATCH, WRAP).margins(t = 26.dp, b = 6.dp))
     }
+
+    private fun brandFooter() = LinearLayout(ctx).apply {
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(18.dp, 0, 18.dp, 0)
+        addView(ImageView(ctx).apply { setImageResource(R.drawable.logo); adjustViewBounds = true }, lp(WRAP, 40.dp))
+        addView(ctx.label(17f, 600, C.text, text = "VeloCinema"), lp(WRAP, WRAP).margins(l = 12.dp))
+        addView(View(ctx), lp(0, 1, 1f))
+        addView(ctx.label(13f, 450, C.textFaint, text = versionName()), lp(WRAP, WRAP))
+    }
+
+    private fun versionName() = try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "" } catch (_: Throwable) { "" }
 
     private fun startScreensaver() {
         try { act.startActivity(Intent("com.google.android.pano.action.SLEEP").setComponent(ComponentName("com.android.tv.settings", "com.android.tv.settings.device.display.daydream.DaydreamVoiceAction"))) }

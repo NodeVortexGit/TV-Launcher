@@ -311,6 +311,8 @@ class LockActivity : Activity() {
         profilesRow = LinearLayout(this).apply { gravity = Gravity.CENTER; clipChildren = false }
         col.addView(profilesRow, lp(WRAP, WRAP))
         root.addView(col, flp(WRAP, WRAP, Gravity.CENTER))
+        root.addView(ImageView(this).apply { setImageResource(R.drawable.logo); adjustViewBounds = true; alpha = 0.85f },
+            flp(WRAP, 54.dp, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).margins(b = 36.dp))
         setContentView(root)
         buildProfiles()
     }
