@@ -163,6 +163,7 @@ object ShareServer {
             .put("lockRequired", l.required()).put("lockShowing", l.showing)
             .put("profiles", JSONArray(l.profiles))
             .put("bridge", Aura.app.bridge.state.name)
+            .put("bridgeDiag", Aura.prefs.getString("bridgeDiag", "") ?: "")
             .put("stockDisabled", StockLauncher.disabled(app)).put("auraIsDefault", StockLauncher.auraIsDefault(app))
             .put("epgDays", Aura.app.epg.daysStored)
             .put("musicSaver", pr.getBoolean("musicSaver", true))

@@ -242,31 +242,79 @@ class AdbBridge(private val ctx: Context) {
                 Thread.sleep(2500)
             }
         } catch (_: Throwable) { }
-        // Fast path: adbd runs as the shell uid and is (nearly) its only listener — read it from the
-        // kernel's socket table (readable for targetSdk ≤ 28 apps). Retry while adbd is still starting.
-        repeat(10) {
-            val cands = adbdListeners()
-            // A single adbd listener needs no probe; several (rare) get asked for STLS.
-            (if (cands.size == 1) cands.first() else cands.firstOrNull { isStls(it) })
-                ?.let { Aura.prefs.edit().putInt("adbTlsPort", it).apply(); return it }
-            Thread.sleep(1000)
+        // 1) adbd announces the port over mDNS (_adb-tls-connect._tcp), exactly how a PC finds it.
+        //    Retry for a while: right after boot adbd / mDNS may still be starting.
+        repeat(6) {
+            mdnsPort()?.let { return found(it, "mdns") }
+            adbdListeners().firstOrNull { isStls(it) }?.let { return found(it, "proc") }
+            Thread.sleep(2000)
         }
-        scanForStls()?.let { Aura.prefs.edit().putInt("adbTlsPort", it).apply(); return it }
+        // 2) Last resort: probe every ephemeral loopback port (slow, ~20–60 s on a busy TV).
+        scanForStls()?.let { return found(it, "scan") }
+        diag("no wireless-debugging port found")
         return null
+    }
+
+    private fun found(port: Int, how: String): Int {
+        Aura.prefs.edit().putInt("adbTlsPort", port).apply()
+        diag("port $port via $how")
+        return port
+    }
+
+    /** Last discovery outcome, kept for /api/state (the TV's log drops lines under load). */
+    private fun diag(msg: String) {
+        Log.i(TAG, msg)
+        Aura.prefs.edit().putString("bridgeDiag", java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(java.util.Date()) + " " + msg).apply()
+    }
+
+    /** Ports announced as _adb-tls-connect._tcp on the network; the one answering STLS on loopback is ours. */
+    private fun mdnsPort(): Int? {
+        val nsd = ctx.getSystemService(android.net.nsd.NsdManager::class.java) ?: return null
+        val ports = java.util.concurrent.ConcurrentLinkedQueue<Int>()
+        val pending = java.util.concurrent.atomic.AtomicInteger(0)
+        val listener = object : android.net.nsd.NsdManager.DiscoveryListener {
+            override fun onServiceFound(info: android.net.nsd.NsdServiceInfo) {
+                pending.incrementAndGet()
+                @Suppress("DEPRECATION")
+                nsd.resolveService(info, object : android.net.nsd.NsdManager.ResolveListener {
+                    override fun onServiceResolved(r: android.net.nsd.NsdServiceInfo) { ports.add(r.port); pending.decrementAndGet() }
+                    override fun onResolveFailed(r: android.net.nsd.NsdServiceInfo, code: Int) { pending.decrementAndGet() }
+                })
+            }
+            override fun onServiceLost(info: android.net.nsd.NsdServiceInfo) {}
+            override fun onDiscoveryStarted(type: String) {}
+            override fun onDiscoveryStopped(type: String) {}
+            override fun onStartDiscoveryFailed(type: String, code: Int) { Log.w(TAG, "mdns start failed $code") }
+            override fun onStopDiscoveryFailed(type: String, code: Int) {}
+        }
+        try { nsd.discoverServices("_adb-tls-connect._tcp", android.net.nsd.NsdManager.PROTOCOL_DNS_SD, listener) } catch (t: Throwable) { Log.w(TAG, "mdns: $t"); return null }
+        try {
+            val until = System.currentTimeMillis() + 4000
+            while (System.currentTimeMillis() < until) {
+                ports.firstOrNull { isStls(it) }?.let { return it }
+                Thread.sleep(250)
+            }
+            return ports.firstOrNull { isStls(it) }
+        } finally {
+            try { nsd.stopServiceDiscovery(listener) } catch (_: Throwable) { }
+        }
     }
 
     /** Listening TCP ports owned by uid 2000 (shell = adbd), from /proc/net/tcp{6,}. */
     private fun adbdListeners(): List<Int> {
         val out = ArrayList<Int>(2)
+        var lines = 0
         for (f in arrayOf("/proc/net/tcp6", "/proc/net/tcp")) try {
             java.io.File(f).forEachLine { line ->
+                lines++
                 val c = line.trim().split(' ').filter { it.isNotEmpty() }
                 if (c.size > 7 && c[3] == "0A" && c[7] == "2000") {
                     val port = c[1].substringAfterLast(':').toIntOrNull(16) ?: return@forEachLine
                     if (port != 5555 && port !in out) out += port
                 }
             }
-        } catch (_: Throwable) { }
+        } catch (t: Throwable) { Log.w(TAG, "read $f: $t") }
+        if (out.isEmpty()) Log.i(TAG, "/proc/net: $lines lines, no adbd listener")
         return out
     }
 
@@ -283,7 +331,8 @@ class AdbBridge(private val ctx: Context) {
                 try { Socket().use { it.connect(InetSocketAddress("127.0.0.1", p), 40) }; open.add(p) } catch (_: Throwable) { }
             }
         }
-        pool.shutdown(); pool.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS)
+        pool.shutdown(); pool.awaitTermination(150, java.util.concurrent.TimeUnit.SECONDS)
+        Log.i(TAG, "open loopback ports: ${open.sorted()}")
         return open.sorted().firstOrNull { isStls(it) }
     }
 
